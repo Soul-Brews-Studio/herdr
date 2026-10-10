@@ -73,7 +73,10 @@ pub(super) fn apply_profiles(
     }
     let pixel_mouse_available = state.pixel_mouse_available();
     if let Some(shell) = state.shell.as_mut() {
-        shell.set_endpoint_catalog(&catalog.ssh);
+        // Only a live catalog reload saves pruned folds; a failed startup load must not erase them.
+        if shell.set_endpoint_catalog(&catalog.ssh) {
+            shell.persist_removed_machine_folds();
+        }
         if endpoints.active_surface_available()
             && previous_size
                 != Some(shell.surface_size(state.reported_size.0, state.reported_size.1))

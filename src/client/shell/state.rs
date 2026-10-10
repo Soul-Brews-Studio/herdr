@@ -1029,6 +1029,18 @@ impl ClientShellState {
                 .or_default()
                 .extend(saved.collapsed_groups);
         }
+        let collapsed_endpoints = preferences
+            .collapsed_machines
+            .into_iter()
+            .filter_map(|saved| {
+                if saved == preferences::LOCAL_MACHINE_KEY {
+                    return Some(ClientEndpointId::Local);
+                }
+                crate::client::endpoint::ProfileId::parse(saved)
+                    .ok()
+                    .map(ClientEndpointId::Ssh)
+            })
+            .collect();
         Self {
             machine_diagnostics: Default::default(),
             config,
@@ -1072,7 +1084,7 @@ impl ClientShellState {
             hits: ShellHitMap::default(),
             endpoints: vec![local_endpoint()],
             active_endpoint_id: ClientEndpointId::Local,
-            collapsed_endpoints: HashSet::new(),
+            collapsed_endpoints,
             mode: ClientShellMode::Terminal,
             navigate_workspace_id: None,
             pending_workspace_highlight: None,

@@ -189,6 +189,14 @@ pub(crate) fn keybind_help_groups(
                     "resize pane right",
                 ),
                 entry(binding_label(&keybinds.toggle_sidebar), "toggle sidebar"),
+                entry(
+                    binding_label(&keybinds.toggle_machine_collapse),
+                    "fold machine",
+                ),
+                entry(
+                    binding_label(&keybinds.collapse_other_machines),
+                    "fold other machines",
+                ),
                 entry(binding_label(&keybinds.focus_pane_left), "focus pane left"),
                 entry(binding_label(&keybinds.focus_pane_down), "focus pane down"),
                 entry(binding_label(&keybinds.focus_pane_up), "focus pane up"),

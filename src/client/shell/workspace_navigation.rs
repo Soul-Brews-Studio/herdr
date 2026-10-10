@@ -96,7 +96,7 @@ impl ClientShellState {
         })
     }
 
-    pub(super) fn move_navigate_workspace(&mut self, delta: isize) {
+    pub(super) fn move_navigate_workspace(&mut self, delta: isize, outcome: &mut ClientShellInput) {
         let mobile = self.mobile_layout_active();
         let surface_available = self.snapshot.is_some() && self.pane_surface.is_some();
         let empty_collapsed_groups = HashSet::new();
@@ -153,7 +153,9 @@ impl ClientShellState {
             None => 0,
         };
         let target = targets.swap_remove(next);
-        self.collapsed_endpoints.remove(&target.endpoint_id);
+        if self.collapsed_endpoints.remove(&target.endpoint_id) {
+            self.persist_chrome_preferences(outcome);
+        }
         if self.endpoints.len() == 1 && !mobile {
             self.reveal_workspace(&target.workspace_id);
         }
