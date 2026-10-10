@@ -1,0 +1,107 @@
+# Soul-Brews build of herdr: upstream master + our patches (branch soul-brews).
+# Steps copied from upstream's build-artifacts-manual.yml; only the targets we run.
+# Docs: Soul-Brews-Studio/herdr-orca-oracle docs/herdr-fork.md
+name: SB build
+
+on:
+  push:
+    branches: [soul-brews]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sb-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RUST_TOOLCHAIN_VERSION: 1.96.1
+  LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
+  LIBGHOSTTY_VT_SIMD: 'false'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: herdr-macos-aarch64
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            name: herdr-linux-x86_64
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          targets: ${{ matrix.target }}
+      - name: Install Zig
+        uses: vercel-labs/setup-zig@83c1594f26b86da8a9a8ddd9b5ee5f3af0f96943 # v1.0.2
+        with:
+          version: 0.16.0
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo find /etc/apt/sources.list.d -type f \( -iname '*microsoft*' -o -iname '*azure-cli*' \) -print -delete
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build musl-tools
+      - name: Remove Zig caches
+        run: rm -rf .zig-cache vendor/libghostty-vt/.zig-cache vendor/libghostty-vt/zig-out
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          cp target/${{ matrix.target }}/release/herdr ${{ matrix.name }}
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "target=${{ matrix.target }}"
+            file ${{ matrix.name }}
+          } > ${{ matrix.name }}.BUILD_INFO.txt
+          shasum -a 256 ${{ matrix.name }} >> ${{ matrix.name }}.BUILD_INFO.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}
+            ${{ matrix.name }}.BUILD_INFO.txt
+          retention-days: 14
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          tag="v${ver}-sb.${GITHUB_RUN_NUMBER}"
+          {
+            echo "herdr ${ver} (upstream master) + Soul-Brews patches, commit ${GITHUB_SHA::8}."
+            echo
+            echo "Patches since upstream:"
+            git log --format='- %s' "origin/master..${GITHUB_SHA}" 2>/dev/null || true
+            echo
+            echo "Install by hand: see docs/herdr-fork.md in Soul-Brews-Studio/herdr-orca-oracle."
+          } > notes.md
+          gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "$tag" --notes-file notes.md
