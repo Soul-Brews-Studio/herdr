@@ -1078,4 +1078,41 @@ fn machine_fold_keys_target_the_active_or_selected_machine() {
         state.collapsed_endpoints,
         HashSet::from([ClientEndpointId::Local])
     );
+
+    preview_key(&mut state, b"y");
+    assert!(state.collapsed_endpoints.is_empty());
+}
+
+#[test]
+fn collapse_other_machines_toggles_and_is_saved() {
+    let path = std::env::temp_dir().join(format!(
+        "herdr-client-shell-fold-others-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let (mut state, remote_id) = state_with_remote();
+    state.config.preferences_path = Some(path.clone());
+    let mut config = Config::default();
+    config.keys.collapse_other_machines = crate::config::BindingConfig::one("prefix+y");
+    state.config.keybinds = ClientShellConfig::from_config(&config).keybinds;
+    let press = |state: &mut ClientShellState| {
+        state.handle_input_bytes(&[0x02]);
+        assert!(state.handle_input_bytes(b"y").repaint);
+        preferences::load(&path)
+            .expect("saved machine folds")
+            .collapsed_machines
+    };
+
+    assert_eq!(press(&mut state), [remote_profile().id.to_string()]);
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([remote_id.clone()])
+    );
+    assert!(press(&mut state).is_empty());
+    assert!(state.collapsed_endpoints.is_empty());
+
+    state.collapsed_endpoints.insert(remote_id.clone());
+    assert!(press(&mut state).is_empty());
+    assert!(state.collapsed_endpoints.is_empty());
+    std::fs::remove_file(path).expect("remove client chrome preferences");
 }
