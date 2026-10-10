@@ -249,6 +249,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Start with the sidebar collapsed. Changes take effect on the next launch.
 # sidebar_start_collapsed = false
 
+# On attach, open saved machines whose session matches this window's session and fold the
+# other remote machines. Local stays open. Manual folds last until the next attach.
+# fold_machines_by_session = false
+
 # Collapsed sidebar presentation: "compact" keeps the narrow status rail, "hidden" uses zero width.
 # sidebar_collapsed_mode = "compact"
 

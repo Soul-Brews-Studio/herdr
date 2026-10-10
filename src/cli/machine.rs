@@ -19,7 +19,7 @@ const HELP: &str = "Usage:
   herdr machine fold (<machine>... | --all)
   herdr machine unfold (<machine>... | --all)
   herdr machine toggle <machine>...
-  herdr machine fold-others <machine>
+  herdr machine fold-others (<machine> | --same-session)
   herdr machine folds [--json]
 
 Add prepares the remote Herdr installation and starts its server before saving.
@@ -30,7 +30,8 @@ Saved machines contain only a label, SSH target, explicit Herdr session, and ena
 SSH credentials and key material remain owned by OpenSSH.
 Fold commands change which machines this client's sidebar shows folded. <machine> is
 `local`, a label, or a profile ID. fold-others folds every other machine, or unfolds all
-when the others are already folded. Open Herdr clients apply fold changes within a second.";
+when the others are already folded. fold-others --same-session opens Local and the machines
+saved for this client's session and folds the rest. Open Herdr clients apply fold changes within a second.";
 
 #[derive(Serialize)]
 struct MachineListRow<'a> {
@@ -645,16 +646,20 @@ fn change_folds(command: &str, args: &[String]) -> std::io::Result<i32> {
         "fold" | "unfold" => {
             format!("usage: herdr machine {command} (<machine>... | --all) [--json]")
         }
-        "fold-others" => "usage: herdr machine fold-others <machine> [--json]".to_owned(),
+        "fold-others" => {
+            "usage: herdr machine fold-others (<machine> | --same-session) [--json]".to_owned()
+        }
         _ => "usage: herdr machine toggle <machine>... [--json]".to_owned(),
     };
     let json = args.iter().any(|arg| arg == "--json");
     let all = args.iter().any(|arg| arg == "--all");
+    let same_session = args.iter().any(|arg| arg == "--same-session");
     let selectors = args
         .iter()
-        .filter(|arg| *arg != "--json" && *arg != "--all")
+        .filter(|arg| !matches!(arg.as_str(), "--json" | "--all" | "--same-session"))
         .collect::<Vec<_>>();
     let valid = match command {
+        _ if same_session => command == "fold-others" && !all && selectors.is_empty(),
         "fold" | "unfold" => all == selectors.is_empty(),
         "fold-others" => !all && selectors.len() == 1,
         _ => !all && !selectors.is_empty(),
@@ -686,9 +691,18 @@ fn change_folds(command: &str, args: &[String]) -> std::io::Result<i32> {
         targets = machines.clone();
     }
     let path = crate::client::shell_preferences::local_client_path();
-    let current = crate::client::shell_preferences::load_collapsed_machines(&path)
-        .map_err(std::io::Error::other)?;
-    let next = apply_fold_command(command, &targets, &machines, current);
+    let next = if same_session {
+        let session = crate::session::name_for_client_socket(
+            &crate::server::socket_paths::client_socket_path(),
+        );
+        crate::client::endpoint::machines_outside_session(&catalog.ssh, &session)
+            .map(ToString::to_string)
+            .collect()
+    } else {
+        let current = crate::client::shell_preferences::load_collapsed_machines(&path)
+            .map_err(std::io::Error::other)?;
+        apply_fold_command(command, &targets, &machines, current)
+    };
     crate::client::shell_preferences::store_collapsed_machines(&path, next.clone())
         .map_err(std::io::Error::other)?;
     print_folds(&fold_rows(&catalog, &next), json)
