@@ -1029,18 +1029,7 @@ impl ClientShellState {
                 .or_default()
                 .extend(saved.collapsed_groups);
         }
-        let collapsed_endpoints = preferences
-            .collapsed_machines
-            .into_iter()
-            .filter_map(|saved| {
-                if saved == preferences::LOCAL_MACHINE_KEY {
-                    return Some(ClientEndpointId::Local);
-                }
-                crate::client::endpoint::ProfileId::parse(saved)
-                    .ok()
-                    .map(ClientEndpointId::Ssh)
-            })
-            .collect();
+        let collapsed_endpoints = collapsed_endpoints_from(preferences.collapsed_machines);
         Self {
             machine_diagnostics: Default::default(),
             config,
@@ -1905,5 +1894,36 @@ impl ClientShellState {
         self.pending_pane_surface = None;
         self.hits = ShellHitMap::default();
         self.host_mouse_pixels = None;
+    }
+}
+
+fn collapsed_endpoints_from(saved: Vec<String>) -> HashSet<ClientEndpointId> {
+    saved
+        .into_iter()
+        .filter_map(|saved| {
+            if saved == preferences::LOCAL_MACHINE_KEY {
+                return Some(ClientEndpointId::Local);
+            }
+            crate::client::endpoint::ProfileId::parse(saved)
+                .ok()
+                .map(ClientEndpointId::Ssh)
+        })
+        .collect()
+}
+
+impl ClientShellState {
+    pub(crate) fn preferences_path(&self) -> Option<&std::path::Path> {
+        self.config.preferences_path.as_deref()
+    }
+
+    /// Adopts folds another process wrote to this client's preferences file, such as
+    /// `herdr machine fold`. Returns whether the sidebar changed.
+    pub(crate) fn apply_saved_machine_folds(&mut self, saved: Vec<String>) -> bool {
+        let next = collapsed_endpoints_from(saved);
+        if next == self.collapsed_endpoints {
+            return false;
+        }
+        self.collapsed_endpoints = next;
+        true
     }
 }

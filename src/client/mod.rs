@@ -55,6 +55,7 @@ use state::ClientState;
 use state::RetiredDirectGraphicsMatch;
 use transport::*;
 
+pub(crate) use shell::preferences as shell_preferences;
 #[cfg(test)]
 pub(crate) use shell::{ClientShellConfig, ClientShellState};
 pub use startup::{run_client, run_terminal_attach};
@@ -665,6 +666,17 @@ async fn run_client_loop(
     let mut pending_catalog: Option<Result<Vec<endpoint::SavedSshEndpoint>, String>> = None;
     if state.shell.is_some() && !is_remote_client && state.attach_escape.is_none() {
         catalog_reload::watch_profiles(event_tx.clone(), should_quit.clone());
+        if let Some(path) = state
+            .shell
+            .as_ref()
+            .and_then(|shell| shell.preferences_path())
+        {
+            catalog_reload::watch_machine_folds(
+                path.to_path_buf(),
+                event_tx.clone(),
+                should_quit.clone(),
+            );
+        }
     }
 
     // This (foreground) client owns the prefix ASCII input-source switch
@@ -825,6 +837,31 @@ async fn run_client_loop(
 
         match event {
             ClientLoopEvent::EndpointCatalog(reload) => pending_catalog = Some(reload),
+            ClientLoopEvent::MachineFolds(saved) => {
+                let Some(shell) = state.shell.as_mut() else {
+                    continue;
+                };
+                if !shell.apply_saved_machine_folds(saved) {
+                    continue;
+                }
+                let frame = shell.compose(state.reported_size.0, state.reported_size.1);
+                let outcome = shell::ClientShellInput {
+                    repaint: true,
+                    ..Default::default()
+                };
+                if finish_client_shell_input(
+                    &mut state,
+                    outcome,
+                    frame,
+                    &mut write_stream,
+                    &mut pending_activation,
+                    &mut endpoint_commands,
+                    &mut prefix_input_source,
+                    &mut scheduled_activation,
+                )? {
+                    return Ok(());
+                }
+            }
             #[cfg(unix)]
             ClientLoopEvent::StdinInput(data) => {
                 let image_bridge_active = endpoint_accepts_local_images(

@@ -49,6 +49,39 @@ pub(super) fn command() -> Command {
         .subcommand(profile_command("remove", "Remove a saved SSH machine"))
         .subcommand(profile_command("enable", "Enable a saved SSH machine"))
         .subcommand(profile_command("disable", "Disable a saved SSH machine"))
+        .subcommand(fold_command("fold", "Fold machines in this client's sidebar").arg(all_flag()))
+        .subcommand(fold_command("unfold", "Unfold machines in this client's sidebar").arg(all_flag()))
+        .subcommand(fold_command("toggle", "Fold or unfold machines in this client's sidebar"))
+        .subcommand(
+            Command::new("fold-others")
+                .about("Fold every other machine, or unfold all when the others are folded")
+                .arg(Arg::new("machine").value_name("MACHINE").required(true))
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("folds")
+                .about("Show which machines this client's sidebar folds")
+                .arg(json_flag()),
+        )
+}
+
+fn fold_command(name: &'static str, about: &'static str) -> Command {
+    Command::new(name)
+        .about(about)
+        .arg(
+            Arg::new("machine")
+                .value_name("MACHINE")
+                .num_args(1..)
+                .help("`local`, a machine label, or a profile ID"),
+        )
+        .arg(json_flag())
+}
+
+fn all_flag() -> Arg {
+    Arg::new("all")
+        .long("all")
+        .action(clap::ArgAction::SetTrue)
+        .help("Apply to every machine")
 }
 
 fn profile_command(name: &'static str, about: &'static str) -> Command {
