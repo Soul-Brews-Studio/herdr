@@ -842,6 +842,18 @@
           "description": "Toggle sidebar collapse."
         },
         {
+          "key": "keys.toggle_machine_collapse",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Fold or unfold a machine in the sidebar: the machine of the selected workspace in navigate mode, otherwise the active machine. Folded machines are remembered across restarts. Unset by default; for example, toggle_machine_collapse = \"prefix+m\"."
+        },
+        {
+          "key": "keys.collapse_other_machines",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Fold every sidebar machine except the one of the selected workspace in navigate mode, otherwise the active machine, and unfold that one. Unset by default."
+        },
+        {
           "key": "keys.indexed.tabs",
           "type": "string",
           "default": "unset",

@@ -28,7 +28,12 @@ pub(super) struct ClientChromePreferences {
     pub(super) collapsed_groups: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(super) remote_collapsed_groups: Vec<ClientRemoteCollapsedGroups>,
+    /// Folded sidebar machines: `"local"` or a saved SSH profile id.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(super) collapsed_machines: Vec<String>,
 }
+
+pub(super) const LOCAL_MACHINE_KEY: &str = "local";
 
 pub(super) fn path_for_local_endpoint(socket_path: &Path) -> PathBuf {
     let mut hash = 0xcbf29ce484222325u64;
@@ -120,6 +125,7 @@ mod tests {
 
         assert_eq!(preferences.collapsed_groups, ["/repo"]);
         assert!(preferences.remote_collapsed_groups.is_empty());
+        assert!(preferences.collapsed_machines.is_empty());
     }
 
     #[test]

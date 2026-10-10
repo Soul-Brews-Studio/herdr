@@ -19,6 +19,17 @@ impl ClientShellState {
                 outcome.resize = true;
                 self.persist_chrome_preferences(outcome);
             }
+            crate::input::KeybindMatch::Action(
+                crate::input::KeybindAction::ToggleMachineCollapse,
+            ) => {
+                self.toggle_machine_collapse(self.active_endpoint_id.clone(), outcome);
+            }
+            crate::input::KeybindMatch::Action(
+                crate::input::KeybindAction::CollapseOtherMachines,
+            ) => {
+                let active = self.active_endpoint_id.clone();
+                self.collapse_other_machines(&active, outcome);
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(
