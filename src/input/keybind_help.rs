@@ -195,7 +195,7 @@ pub(crate) fn keybind_help_groups(
                 ),
                 entry(
                     binding_label(&keybinds.collapse_other_machines),
-                    "fold other machines",
+                    "fold others / unfold all",
                 ),
                 entry(binding_label(&keybinds.focus_pane_left), "focus pane left"),
                 entry(binding_label(&keybinds.focus_pane_down), "focus pane down"),

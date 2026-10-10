@@ -59,12 +59,20 @@ impl ClientShellState {
         endpoint_id: &ClientEndpointId,
         outcome: &mut ClientShellInput,
     ) {
-        self.collapsed_endpoints = self
+        let others = self
             .endpoints
             .iter()
-            .map(|endpoint| endpoint.endpoint_id.clone())
-            .filter(|other| other != endpoint_id)
-            .collect();
+            .map(|endpoint| &endpoint.endpoint_id)
+            .filter(|other| *other != endpoint_id);
+        // Once every other machine is folded, the same key unfolds all of them.
+        self.collapsed_endpoints = if others
+            .clone()
+            .all(|other| self.collapsed_endpoints.contains(other))
+        {
+            HashSet::new()
+        } else {
+            others.cloned().collect()
+        };
         self.persist_chrome_preferences(outcome);
         outcome.repaint = true;
     }

@@ -457,7 +457,8 @@ pub struct KeysConfig {
     pub toggle_sidebar: BindingConfig,
     /// Fold or unfold the machine under the navigate cursor, else the active machine. Unset by default.
     pub toggle_machine_collapse: BindingConfig,
-    /// Fold every machine except the one under the navigate cursor, else the active machine. Unset by default.
+    /// Fold every machine except the one under the navigate cursor, else the active machine; when the
+    /// others are already folded, unfold all machines. Unset by default.
     pub collapse_other_machines: BindingConfig,
     /// Optional indexed shortcuts expanded over number keys 1-9.
     pub indexed: IndexedKeysConfig,
