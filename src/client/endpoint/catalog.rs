@@ -25,6 +25,17 @@ pub(crate) struct SavedSshEndpoint {
     pub(crate) enabled: bool,
 }
 
+/// Saved machines that belong to a different session than `session`.
+pub(crate) fn machines_outside_session<'a>(
+    profiles: &'a [SavedSshEndpoint],
+    session: &'a str,
+) -> impl Iterator<Item = &'a ProfileId> + 'a {
+    profiles
+        .iter()
+        .filter(move |profile| profile.session != session)
+        .map(|profile| &profile.id)
+}
+
 impl SavedSshEndpoint {
     pub(crate) fn new(
         label: impl Into<String>,

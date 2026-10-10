@@ -103,6 +103,10 @@ pub(super) fn apply_profiles(
         if shell.set_endpoint_catalog(&catalog.ssh) {
             shell.persist_removed_machine_folds();
         }
+        shell.apply_session_folds(
+            &crate::session::name_for_client_socket(&client_socket_path()),
+            &catalog.ssh,
+        );
         if endpoints.active_surface_available()
             && previous_size
                 != Some(shell.surface_size(state.reported_size.0, state.reported_size.1))

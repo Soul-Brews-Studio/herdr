@@ -55,7 +55,18 @@ pub(super) fn command() -> Command {
         .subcommand(
             Command::new("fold-others")
                 .about("Fold every other machine, or unfold all when the others are folded")
-                .arg(Arg::new("machine").value_name("MACHINE").required(true))
+                .arg(
+                    Arg::new("machine")
+                        .value_name("MACHINE")
+                        .required_unless_present("same-session"),
+                )
+                .arg(
+                    Arg::new("same-session")
+                        .long("same-session")
+                        .action(clap::ArgAction::SetTrue)
+                        .conflicts_with("machine")
+                        .help("Open Local and the machines saved for this client's session; fold the rest"),
+                )
                 .arg(json_flag()),
         )
         .subcommand(

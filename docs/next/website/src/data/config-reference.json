@@ -902,6 +902,12 @@
           "description": "Start Herdr with the sidebar collapsed. Changes take effect on the next launch."
         },
         {
+          "key": "ui.fold_machines_by_session",
+          "type": "boolean",
+          "default": "false",
+          "description": "When a client attaches, and when saved machines change, unfold saved machines whose session matches the session of this window and fold every other remote machine. Local stays unfolded. Folds changed by hand, by keys, or by `herdr machine` commands last until the next attach. `herdr machine fold-others --same-session` applies the same rule once."
+        },
+        {
           "key": "ui.sidebar_collapsed_mode",
           "type": "enum",
           "default": "compact",

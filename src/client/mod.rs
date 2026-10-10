@@ -499,6 +499,12 @@ async fn run_client_loop(
         shell.set_host_erase_byte(crate::platform::terminal_erase_byte());
         shell.set_graphics_cell_size(initial_cell_width_px, initial_cell_height_px);
         shell.set_endpoint_catalog(&endpoint_catalog.ssh);
+        if !is_remote_client_process() {
+            shell.apply_session_folds(
+                &crate::session::name_for_client_socket(&client_socket_path()),
+                &endpoint_catalog.ssh,
+            );
+        }
         shell.set_endpoint_methods_for(
             &endpoint::ClientEndpointId::Local,
             initial
