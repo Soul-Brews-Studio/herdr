@@ -67,6 +67,18 @@ Changes apply automatically to open local Herdr clients, normally within a secon
 
 Use `herdr machine status [<label-or-id>] [--json]` for fresh, noninteractive SSH and remote Herdr checks. `reachable` describes this check, not a TUI's current connection. Use `herdr machine reconnect <label-or-id>` in a terminal for SSH authentication and verification; it does not install or update Herdr. Open clients retry failed connections within 30 seconds. Clicking `! auth` or `! error` shows the latest error and CLI guidance; collapsed sidebars show `!`. See [Recovering SSH authentication](/docs/connecting-machines/#recovering-ssh-authentication) for platform limits. For remote setup, use `herdr --remote workbox`, adding `--session <name>` only for a named session.
 
+### Folding machines in the sidebar
+
+```bash
+herdr machine fold black
+herdr machine unfold --all
+herdr machine toggle local "Build machine"
+herdr machine fold-others local
+herdr machine folds --json
+```
+
+Fold commands change which machines the local client's sidebar shows folded, the same state as the machine arrow and the `toggle_machine_collapse` / `collapse_other_machines` keys. A machine is `local`, a label, or a profile ID. `fold-others` folds every other machine, or unfolds all when the others are already folded. Folds are client state, not server state: the commands edit the client preferences for the current session, and open clients apply them within a second. Each command prints every machine with its fold state; add `--json` for scripts.
+
 Workspace, tab, pane IDs, and agent names belong to a single server. Selecting a machine in the UI does not retarget CLI commands. Use the global **prefix** `--machine <label-or-id>` to route API commands to a saved SSH machine:
 
 ```bash

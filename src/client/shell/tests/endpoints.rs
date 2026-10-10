@@ -2918,3 +2918,17 @@ fn navigator_foreign_workspace_heading_keeps_the_workspace_target() {
         }] if activated == &endpoint_id && workspace_id == "ws_1"
     ));
 }
+
+#[test]
+fn saved_machine_folds_from_other_processes_apply_once() {
+    let (mut state, remote_id) = state_with_remote();
+    let saved = vec!["local".to_owned(), remote_profile().id.to_string()];
+    assert!(state.apply_saved_machine_folds(saved.clone()));
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([ClientEndpointId::Local, remote_id])
+    );
+    assert!(!state.apply_saved_machine_folds(saved));
+    assert!(state.apply_saved_machine_folds(Vec::new()));
+    assert!(state.collapsed_endpoints.is_empty());
+}

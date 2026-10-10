@@ -33,7 +33,7 @@ pub(super) struct ClientChromePreferences {
     pub(super) collapsed_machines: Vec<String>,
 }
 
-pub(super) const LOCAL_MACHINE_KEY: &str = "local";
+pub(crate) const LOCAL_MACHINE_KEY: &str = "local";
 
 pub(super) fn path_for_local_endpoint(socket_path: &Path) -> PathBuf {
     let mut hash = 0xcbf29ce484222325u64;
@@ -58,6 +58,40 @@ pub(super) fn path_for_remote_endpoint(target: &str, session: &str) -> PathBuf {
     crate::config::state_dir()
         .join("client-shell")
         .join(format!("remote-{:x}.json", hash.finalize()))
+}
+
+/// Preferences file of a local client on this socket; `herdr machine fold` edits it.
+pub(crate) fn local_client_path() -> PathBuf {
+    path_for_local_endpoint(&crate::server::socket_paths::client_socket_path())
+}
+
+fn read(path: &Path) -> Result<Option<ClientChromePreferences>, String> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("failed to read {}: {error}", path.display())),
+    };
+    serde_json::from_str(&content)
+        .map(Some)
+        .map_err(|error| format!("invalid client shell state {}: {error}", path.display()))
+}
+
+pub(crate) fn load_collapsed_machines(path: &Path) -> Result<Vec<String>, String> {
+    Ok(read(path)?
+        .map(|preferences| preferences.collapsed_machines)
+        .unwrap_or_default())
+}
+
+/// Replaces only the folded machines, keeping every other saved preference.
+pub(crate) fn store_collapsed_machines(
+    path: &Path,
+    mut machines: Vec<String>,
+) -> Result<(), String> {
+    let mut preferences = read(path)?.unwrap_or_default();
+    machines.sort();
+    machines.dedup();
+    preferences.collapsed_machines = machines;
+    store(path, preferences)
 }
 
 pub(super) fn load(path: &Path) -> Option<ClientChromePreferences> {
@@ -126,6 +160,41 @@ mod tests {
         assert_eq!(preferences.collapsed_groups, ["/repo"]);
         assert!(preferences.remote_collapsed_groups.is_empty());
         assert!(preferences.collapsed_machines.is_empty());
+    }
+
+    #[test]
+    fn collapsed_machines_store_keeps_other_preferences() {
+        let path = std::env::temp_dir().join(format!(
+            "herdr-shell-collapsed-machines-{}.json",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        assert!(load_collapsed_machines(&path)
+            .expect("missing file")
+            .is_empty());
+        store(
+            &path,
+            ClientChromePreferences {
+                sidebar_width: Some(30),
+                collapsed_groups: vec!["/repo".into()],
+                ..ClientChromePreferences::default()
+            },
+        )
+        .expect("seed preferences");
+        store_collapsed_machines(&path, vec!["local".into(), "b".into(), "local".into()])
+            .expect("store folds");
+        assert_eq!(
+            load_collapsed_machines(&path).expect("folds"),
+            ["b", "local"]
+        );
+        let saved = load(&path).expect("preferences");
+        assert_eq!(saved.sidebar_width, Some(30));
+        assert_eq!(saved.collapsed_groups, ["/repo"]);
+
+        std::fs::write(&path, "not json").expect("corrupt preferences");
+        assert!(store_collapsed_machines(&path, Vec::new()).is_err());
+        assert_eq!(std::fs::read_to_string(&path).expect("kept"), "not json");
+        std::fs::remove_file(path).expect("remove preferences");
     }
 
     #[test]
