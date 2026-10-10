@@ -74,10 +74,11 @@ herdr machine fold black
 herdr machine unfold --all
 herdr machine toggle local "Build machine"
 herdr machine fold-others local
+herdr machine fold-others --same-session
 herdr machine folds --json
 ```
 
-Fold commands change which machines the local client's sidebar shows folded, the same state as the machine arrow and the `toggle_machine_collapse` / `collapse_other_machines` keys. A machine is `local`, a label, or a profile ID. `fold-others` folds every other machine, or unfolds all when the others are already folded. Folds are client state, not server state: the commands edit the client preferences for the current session, and open clients apply them within a second. Each command prints every machine with its fold state; add `--json` for scripts.
+Fold commands change which machines the local client's sidebar shows folded, the same state as the machine arrow and the `toggle_machine_collapse` / `collapse_other_machines` keys. A machine is `local`, a label, or a profile ID. `fold-others` folds every other machine, or unfolds all when the others are already folded. `fold-others --same-session` opens Local and the saved machines whose session matches this client's session, and folds the rest; `ui.fold_machines_by_session` applies the same rule on every attach. Folds are client state, not server state: the commands edit the client preferences for the current session, and open clients apply them within a second. Each command prints every machine with its fold state; add `--json` for scripts.
 
 Workspace, tab, pane IDs, and agent names belong to a single server. Selecting a machine in the UI does not retarget CLI commands. Use the global **prefix** `--machine <label-or-id>` to route API commands to a saved SSH machine:
 

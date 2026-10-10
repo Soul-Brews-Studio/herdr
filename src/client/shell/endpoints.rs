@@ -107,6 +107,19 @@ impl ClientShellState {
         self.collapsed_endpoints.len() != folded
     }
 
+    /// With `ui.fold_machines_by_session`, opens Local and the saved machines of `session` and
+    /// folds every other machine, then saves the result.
+    pub(crate) fn apply_session_folds(&mut self, session: &str, profiles: &[SavedSshEndpoint]) {
+        if !self.config.fold_machines_by_session {
+            return;
+        }
+        self.collapsed_endpoints =
+            crate::client::endpoint::machines_outside_session(profiles, session)
+                .map(|id| ClientEndpointId::Ssh(id.clone()))
+                .collect();
+        self.persist_chrome_preferences(&mut ClientShellInput::default());
+    }
+
     /// Saves folded machines after a live catalog change removed some of them.
     pub(crate) fn persist_removed_machine_folds(&mut self) {
         self.persist_chrome_preferences(&mut ClientShellInput::default());

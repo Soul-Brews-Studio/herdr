@@ -2932,3 +2932,72 @@ fn saved_machine_folds_from_other_processes_apply_once() {
     assert!(state.apply_saved_machine_folds(Vec::new()));
     assert!(state.collapsed_endpoints.is_empty());
 }
+
+#[test]
+fn session_folds_open_only_machines_of_this_session() {
+    let profile = |id: &str, label: &str, session: &str| SavedSshEndpoint {
+        id: ProfileId::parse(id).unwrap(),
+        label: label.into(),
+        target: format!("{label}.example"),
+        session: session.into(),
+        enabled: true,
+    };
+    let profiles = [
+        profile("00000000000000000000000000000001", "black", "phd"),
+        profile(
+            "00000000000000000000000000000002",
+            "white-laris-co",
+            "laris-co",
+        ),
+        profile("00000000000000000000000000000003", "white-nsm", "nsm"),
+        profile("00000000000000000000000000000004", "gray-nsm", "nsm"),
+    ];
+    let id = |index: usize| ClientEndpointId::Ssh(profiles[index].id.clone());
+
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_endpoint_catalog(&profiles);
+    state.collapsed_endpoints.insert(id(2));
+    state.apply_session_folds("nsm", &profiles);
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([id(2)]),
+        "config off"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "herdr-client-shell-session-folds-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let mut config = Config::default();
+    config.ui.fold_machines_by_session = true;
+    let mut state = ClientShellState::new(
+        ClientShellConfig::from_config(&config).with_preferences_path(path.clone()),
+    );
+    state.set_endpoint_catalog(&profiles);
+    state.collapsed_endpoints.insert(ClientEndpointId::Local);
+
+    state.apply_session_folds("nsm", &profiles);
+    assert_eq!(state.collapsed_endpoints, HashSet::from([id(0), id(1)]));
+    let mut saved = preferences::load(&path)
+        .expect("saved session folds")
+        .collapsed_machines;
+    saved.sort();
+    assert_eq!(
+        saved,
+        [profiles[0].id.to_string(), profiles[1].id.to_string()]
+    );
+
+    state.apply_session_folds("laris-co", &profiles);
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([id(0), id(2), id(3)])
+    );
+
+    state.apply_session_folds("default", &profiles);
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([id(0), id(1), id(2), id(3)])
+    );
+    std::fs::remove_file(path).expect("remove client chrome preferences");
+}

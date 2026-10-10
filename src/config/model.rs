@@ -957,6 +957,9 @@ pub struct UiConfig {
     pub sidebar_max_width: u16,
     /// Start with the sidebar collapsed. Default: false.
     pub sidebar_start_collapsed: bool,
+    /// On attach, unfold saved machines whose session matches this window's session and fold
+    /// the other remote machines. Default: false.
+    pub fold_machines_by_session: bool,
     /// Collapsed sidebar presentation. Default: compact.
     pub sidebar_collapsed_mode: SidebarCollapsedModeConfig,
     /// Terminal width at or below which Herdr uses the mobile single-column layout. Default: 64.
@@ -1217,6 +1220,7 @@ impl Default for UiConfig {
             sidebar_min_width: 18,
             sidebar_max_width: 36,
             sidebar_start_collapsed: false,
+            fold_machines_by_session: false,
             sidebar_collapsed_mode: SidebarCollapsedModeConfig::Compact,
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,
@@ -1719,6 +1723,13 @@ sidebar_start_collapsed = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.ui.sidebar_start_collapsed);
+    }
+
+    #[test]
+    fn fold_machines_by_session_defaults_off_and_parses_on() {
+        assert!(!Config::default().ui.fold_machines_by_session);
+        let config: Config = toml::from_str("[ui]\nfold_machines_by_session = true\n").unwrap();
+        assert!(config.ui.fold_machines_by_session);
     }
 
     #[test]
