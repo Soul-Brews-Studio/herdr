@@ -16,13 +16,21 @@ const HELP: &str = "Usage:
   herdr machine remove <profile-id>
   herdr machine enable <profile-id>
   herdr machine disable <profile-id>
+  herdr machine fold (<machine>... | --all)
+  herdr machine unfold (<machine>... | --all)
+  herdr machine toggle <machine>...
+  herdr machine fold-others <machine>
+  herdr machine folds [--json]
 
 Add prepares the remote Herdr installation and starts its server before saving.
 Missing or incompatible installations require approval in an interactive terminal.
 Changes apply automatically to open local Herdr clients.
 Removing or disabling a machine leaves its remote sessions running.
 Saved machines contain only a label, SSH target, explicit Herdr session, and enabled state.
-SSH credentials and key material remain owned by OpenSSH.";
+SSH credentials and key material remain owned by OpenSSH.
+Fold commands change which machines this client's sidebar shows folded. <machine> is
+`local`, a label, or a profile ID. fold-others folds every other machine, or unfolds all
+when the others are already folded. Open Herdr clients apply fold changes within a second.";
 
 #[derive(Serialize)]
 struct MachineListRow<'a> {
@@ -44,6 +52,10 @@ pub(super) fn run_machine_command(args: &[String]) -> std::io::Result<i32> {
         Some("remove") => remove(&args[1..]),
         Some("enable") => set_enabled(&args[1..], true),
         Some("disable") => set_enabled(&args[1..], false),
+        Some(command @ ("fold" | "unfold" | "toggle" | "fold-others")) => {
+            change_folds(command, &args[1..])
+        }
+        Some("folds") => folds(&args[1..]),
         Some("help" | "--help" | "-h") => {
             println!("{HELP}");
             Ok(0)
@@ -571,6 +583,154 @@ fn one_profile_id(args: &[String], usage: &str) -> std::io::Result<Option<Profil
     }
 }
 
+const LOCAL_MACHINE: &str = crate::client::shell_preferences::LOCAL_MACHINE_KEY;
+
+#[derive(Serialize)]
+struct MachineFoldRow<'a> {
+    id: &'a str,
+    label: &'a str,
+    folded: bool,
+}
+
+fn fold_rows<'a>(catalog: &'a EndpointCatalog, folded: &[String]) -> Vec<MachineFoldRow<'a>> {
+    std::iter::once((LOCAL_MACHINE, "Local"))
+        .chain(
+            catalog
+                .ssh
+                .iter()
+                .map(|profile| (profile.id.as_str(), profile.label.as_str())),
+        )
+        .map(|(id, label)| MachineFoldRow {
+            id,
+            label,
+            folded: folded.iter().any(|saved| saved == id),
+        })
+        .collect()
+}
+
+fn folds(args: &[String]) -> std::io::Result<i32> {
+    let json = match args {
+        [] => false,
+        [flag] if flag == "--json" => true,
+        _ => {
+            eprintln!("usage: herdr machine folds [--json]");
+            return Ok(2);
+        }
+    };
+    let catalog = load_catalog()?;
+    let folded = crate::client::shell_preferences::load_collapsed_machines(
+        &crate::client::shell_preferences::local_client_path(),
+    )
+    .map_err(std::io::Error::other)?;
+    print_folds(&fold_rows(&catalog, &folded), json)
+}
+
+fn print_folds(rows: &[MachineFoldRow<'_>], json: bool) -> std::io::Result<i32> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(rows).map_err(std::io::Error::other)?
+        );
+    } else {
+        for row in rows {
+            let state = if row.folded { "folded" } else { "unfolded" };
+            println!("{}\t{}\t{state}", row.id, row.label);
+        }
+    }
+    Ok(0)
+}
+
+fn change_folds(command: &str, args: &[String]) -> std::io::Result<i32> {
+    let usage = match command {
+        "fold" | "unfold" => {
+            format!("usage: herdr machine {command} (<machine>... | --all) [--json]")
+        }
+        "fold-others" => "usage: herdr machine fold-others <machine> [--json]".to_owned(),
+        _ => "usage: herdr machine toggle <machine>... [--json]".to_owned(),
+    };
+    let json = args.iter().any(|arg| arg == "--json");
+    let all = args.iter().any(|arg| arg == "--all");
+    let selectors = args
+        .iter()
+        .filter(|arg| *arg != "--json" && *arg != "--all")
+        .collect::<Vec<_>>();
+    let valid = match command {
+        "fold" | "unfold" => all == selectors.is_empty(),
+        "fold-others" => !all && selectors.len() == 1,
+        _ => !all && !selectors.is_empty(),
+    };
+    if !valid || selectors.iter().any(|arg| arg.starts_with('-')) {
+        eprintln!("{usage}");
+        return Ok(2);
+    }
+    let catalog = load_catalog()?;
+    let mut targets = Vec::with_capacity(selectors.len());
+    for selector in selectors {
+        if selector == LOCAL_MACHINE {
+            targets.push(LOCAL_MACHINE.to_owned());
+            continue;
+        }
+        match super::target::find_machine(&catalog.ssh, selector) {
+            Ok(profile) => targets.push(profile.id.to_string()),
+            Err(error) => {
+                eprintln!("{error}");
+                return Ok(2);
+            }
+        }
+    }
+    let machines = fold_rows(&catalog, &[])
+        .into_iter()
+        .map(|row| row.id.to_owned())
+        .collect::<Vec<_>>();
+    if all {
+        targets = machines.clone();
+    }
+    let path = crate::client::shell_preferences::local_client_path();
+    let current = crate::client::shell_preferences::load_collapsed_machines(&path)
+        .map_err(std::io::Error::other)?;
+    let next = apply_fold_command(command, &targets, &machines, current);
+    crate::client::shell_preferences::store_collapsed_machines(&path, next.clone())
+        .map_err(std::io::Error::other)?;
+    print_folds(&fold_rows(&catalog, &next), json)
+}
+
+/// Same rules as the sidebar arrow and the fold keybinds.
+fn apply_fold_command(
+    command: &str,
+    targets: &[String],
+    machines: &[String],
+    mut folded: Vec<String>,
+) -> Vec<String> {
+    match command {
+        "fold" => folded.extend(targets.iter().cloned()),
+        "unfold" => folded.retain(|machine| !targets.contains(machine)),
+        "fold-others" => {
+            let others = machines
+                .iter()
+                .filter(|machine| !targets.contains(machine))
+                .cloned()
+                .collect::<Vec<_>>();
+            folded = if others.iter().all(|other| folded.contains(other)) {
+                Vec::new()
+            } else {
+                others
+            };
+        }
+        _ => {
+            for target in targets {
+                if folded.contains(target) {
+                    folded.retain(|machine| machine != target);
+                } else {
+                    folded.push(target.clone());
+                }
+            }
+        }
+    }
+    folded.sort();
+    folded.dedup();
+    folded
+}
+
 fn load_catalog() -> std::io::Result<EndpointCatalog> {
     EndpointCatalog::load().map_err(std::io::Error::other)
 }
@@ -582,6 +742,37 @@ fn store_catalog(catalog: &EndpointCatalog) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fold_commands_follow_sidebar_rules() {
+        let machines = ["local".to_owned(), "a".to_owned(), "b".to_owned()];
+        let strings = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            apply_fold_command(
+                "fold",
+                &strings(&["b", "local"]),
+                &machines,
+                strings(&["b"])
+            ),
+            ["b", "local"]
+        );
+        assert_eq!(
+            apply_fold_command(
+                "unfold",
+                &strings(&["b"]),
+                &machines,
+                strings(&["b", "local"])
+            ),
+            ["local"]
+        );
+        assert_eq!(
+            apply_fold_command("toggle", &strings(&["a", "b"]), &machines, strings(&["a"])),
+            ["b"]
+        );
+        let folded = apply_fold_command("fold-others", &strings(&["a"]), &machines, Vec::new());
+        assert_eq!(folded, ["b", "local"]);
+        assert!(apply_fold_command("fold-others", &strings(&["a"]), &machines, folded).is_empty());
+    }
 
     #[test]
     fn add_parser_preserves_values_across_argument_orders() {
