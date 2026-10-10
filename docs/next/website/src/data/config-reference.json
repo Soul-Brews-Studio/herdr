@@ -851,7 +851,7 @@
           "key": "keys.collapse_other_machines",
           "type": "keybinding",
           "default": "unset",
-          "description": "Fold every sidebar machine except the one of the selected workspace in navigate mode, otherwise the active machine, and unfold that one. Unset by default."
+          "description": "Fold every sidebar machine except the one of the selected workspace in navigate mode, otherwise the active machine, and unfold that one. When every other machine is already folded, unfold all machines instead. Unset by default."
         },
         {
           "key": "keys.indexed.tabs",
