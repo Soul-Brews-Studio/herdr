@@ -61,6 +61,7 @@ impl ClientShellState {
             if !self.collapsed_endpoints.remove(&endpoint_id) {
                 self.collapsed_endpoints.insert(endpoint_id.clone());
             }
+            self.persist_chrome_preferences(outcome);
             outcome.repaint = true;
             if !collapse_toggle && endpoint_id.is_local() {
                 self.activate_endpoint(endpoint_id, outcome);

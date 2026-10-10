@@ -762,7 +762,7 @@ impl ClientShellState {
             .workspace_up
             .matches_direct_key(key)
         {
-            self.move_navigate_workspace(-1);
+            self.move_navigate_workspace(-1, outcome);
             outcome.repaint = true;
             return;
         }
@@ -774,7 +774,7 @@ impl ClientShellState {
             .workspace_down
             .matches_direct_key(key)
         {
-            self.move_navigate_workspace(1);
+            self.move_navigate_workspace(1, outcome);
             outcome.repaint = true;
             return;
         }

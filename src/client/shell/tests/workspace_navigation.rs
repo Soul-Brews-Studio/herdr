@@ -453,7 +453,9 @@ fn foreign_preview_survives_local_updates_and_rejects_stale_enter() {
                 profile.enabled = false;
                 state.set_endpoint_catalog(&[profile]);
             }
-            "removed" => state.set_endpoint_catalog(&[]),
+            "removed" => {
+                state.set_endpoint_catalog(&[]);
+            }
             "deleted" => {
                 remote.revision += 1;
                 remote.workspaces.pop();

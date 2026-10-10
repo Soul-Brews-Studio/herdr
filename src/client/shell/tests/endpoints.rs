@@ -2010,6 +2010,85 @@ fn machine_arrow_toggles_inactive_machine_without_switching() {
 }
 
 #[test]
+fn folded_machines_survive_restart_until_their_profile_is_removed() {
+    let path = std::env::temp_dir().join(format!(
+        "herdr-client-shell-folded-machines-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let (mut state, remote_id) = state_with_remote();
+    state.config.preferences_path = Some(path.clone());
+    state.compose(100, 28).expect("machine frame");
+    for endpoint_id in [&remote_id, &ClientEndpointId::Local] {
+        let toggle = state
+            .hits
+            .machines
+            .iter()
+            .find(|hit| &hit.endpoint_id == endpoint_id)
+            .expect("machine row")
+            .collapse_toggle;
+        state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: toggle.x,
+            row: toggle.y,
+            modifiers: KeyModifiers::empty(),
+        })]);
+        assert!(state.collapsed_endpoints.contains(endpoint_id));
+        state.compose(100, 28).expect("folded machine frame");
+    }
+    let saved = preferences::load(&path).expect("saved folded machines");
+    assert_eq!(
+        saved.collapsed_machines,
+        ["0123456789abcdef0123456789abcdef", "local"]
+    );
+
+    let config =
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
+    let mut restarted = ClientShellState::new(config);
+    assert!(!restarted.set_endpoint_catalog(&[remote_profile()]));
+    assert_eq!(
+        restarted.collapsed_endpoints,
+        HashSet::from([ClientEndpointId::Local, remote_id.clone()])
+    );
+
+    assert!(restarted.set_endpoint_catalog(&[]));
+    restarted.persist_removed_machine_folds();
+    assert_eq!(
+        restarted.collapsed_endpoints,
+        HashSet::from([ClientEndpointId::Local])
+    );
+    let saved = preferences::load(&path).expect("pruned folded machines");
+    assert_eq!(saved.collapsed_machines, ["local"]);
+    std::fs::remove_file(path).expect("remove client chrome preferences");
+}
+
+#[test]
+fn navigation_unfold_is_saved() {
+    let path = std::env::temp_dir().join(format!(
+        "herdr-client-shell-navigation-unfold-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let (mut state, remote_id) = state_with_remote();
+    state.config.preferences_path = Some(path.clone());
+    state.collapsed_endpoints.insert(remote_id.clone());
+    state.persist_chrome_preferences(&mut ClientShellInput::default());
+    assert!(!preferences::load(&path)
+        .expect("saved folded machine")
+        .collapsed_machines
+        .is_empty());
+
+    let mut outcome = ClientShellInput::default();
+    state.move_navigate_workspace(-1, &mut outcome);
+    assert!(!state.collapsed_endpoints.contains(&remote_id));
+    assert!(preferences::load(&path)
+        .expect("saved unfolded machine")
+        .collapsed_machines
+        .is_empty());
+    std::fs::remove_file(path).expect("remove client chrome preferences");
+}
+
+#[test]
 fn context_menu_lookup_ignores_inactive_endpoint_workspaces() {
     let (mut state, endpoint_id) = state_with_remote();
     state.compose(100, 28).expect("combined endpoint frame");
