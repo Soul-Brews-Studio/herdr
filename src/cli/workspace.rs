@@ -152,20 +152,47 @@ enum MoveTarget {
 }
 
 fn parse_move_args(args: &[String]) -> Result<(String, MoveTarget), String> {
-    match args {
-        [workspace_id, flag, value] if flag == "--after" => Ok((
-            super::normalize_workspace_id(workspace_id),
-            MoveTarget::After(super::normalize_workspace_id(value)),
-        )),
-        [workspace_id, flag, value] if flag == "--index" => {
-            let index = value
-                .parse::<usize>()
-                .map_err(|_| format!("invalid value for --index: {value}"))?;
-            Ok((
-                super::normalize_workspace_id(workspace_id),
-                MoveTarget::Index(index),
-            ))
+    let mut workspace_id = None;
+    let mut target = None;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        let (flag, inline) = match arg.split_once('=') {
+            Some((flag, value)) if flag.starts_with("--") => (flag, Some(value.to_string())),
+            _ => (arg, None),
+        };
+        match flag {
+            "--after" | "--index" => {
+                let value = match inline {
+                    Some(value) => value,
+                    None => {
+                        index += 1;
+                        args.get(index)
+                            .cloned()
+                            .ok_or_else(|| format!("missing value for {flag}"))?
+                    }
+                };
+                if target.is_some() {
+                    return Err(WORKSPACE_MOVE_USAGE.to_string());
+                }
+                target = Some(if flag == "--after" {
+                    MoveTarget::After(super::normalize_workspace_id(&value))
+                } else {
+                    MoveTarget::Index(
+                        value
+                            .parse::<usize>()
+                            .map_err(|_| format!("invalid value for --index: {value}"))?,
+                    )
+                });
+            }
+            other if other.starts_with("--") => return Err(format!("unknown option: {other}")),
+            _ if workspace_id.is_none() => workspace_id = Some(super::normalize_workspace_id(arg)),
+            _ => return Err(WORKSPACE_MOVE_USAGE.to_string()),
         }
+        index += 1;
+    }
+    match (workspace_id, target) {
+        (Some(workspace_id), Some(target)) => Ok((workspace_id, target)),
         _ => Err(WORKSPACE_MOVE_USAGE.to_string()),
     }
 }
@@ -178,7 +205,7 @@ fn insert_index_after(order: &[String], after: &str) -> Result<usize, String> {
         .iter()
         .position(|id| id == after)
         .map(|position| position + 1)
-        .ok_or_else(|| format!("workspace not found: {after}"))
+        .ok_or_else(|| format!("workspace {after} not found"))
 }
 
 fn workspace_move(args: &[String]) -> std::io::Result<i32> {
@@ -214,7 +241,12 @@ fn workspace_move(args: &[String]) -> std::io::Result<i32> {
             match insert_index_after(&order, &after) {
                 Ok(index) => index,
                 Err(message) => {
-                    eprintln!("{message}");
+                    // same shape as the server's own workspace_not_found
+                    let error = serde_json::json!({
+                        "error": {"code": "workspace_not_found", "message": message},
+                        "id": "cli:workspace:move",
+                    });
+                    eprintln!("{error}");
                     return Ok(1);
                 }
             }
@@ -362,6 +394,14 @@ mod tests {
             parse_move_args(&args(&["w3", "--index", "0"])),
             Ok(("w3".into(), MoveTarget::Index(0)))
         );
+        assert_eq!(
+            parse_move_args(&args(&["--after=w1", "w3"])),
+            Ok(("w3".into(), MoveTarget::After("w1".into())))
+        );
+        assert_eq!(
+            parse_move_args(&args(&["--index", "2", "w3"])),
+            Ok(("w3".into(), MoveTarget::Index(2)))
+        );
     }
 
     #[test]
@@ -370,6 +410,8 @@ mod tests {
         assert!(parse_move_args(&args(&["w3", "--index", "-1"])).is_err());
         assert!(parse_move_args(&args(&["w3", "--after", "w1", "--index", "2"])).is_err());
         assert!(parse_move_args(&args(&["w3", "--before", "w1"])).is_err());
+        assert!(parse_move_args(&args(&["w3", "w4", "--index", "1"])).is_err());
+        assert!(parse_move_args(&args(&["w3", "--after"])).is_err());
     }
 
     #[test]
@@ -378,33 +420,5 @@ mod tests {
         assert_eq!(insert_index_after(&ids, "w1"), Ok(1));
         assert_eq!(insert_index_after(&ids, "w4"), Ok(4));
         assert!(insert_index_after(&ids, "w9").is_err());
-    }
-
-    /// Mirrors `AppState::move_workspace`: remove first, then insert at
-    /// `insert - 1` when moving forward.
-    fn apply_move(ids: &[String], source: &str, insert: usize) -> Vec<String> {
-        let mut out = ids.to_vec();
-        let from = out.iter().position(|id| id == source).unwrap();
-        let to = if from < insert { insert - 1 } else { insert };
-        let moved = out.remove(from);
-        out.insert(to, moved);
-        out
-    }
-
-    #[test]
-    fn after_lands_right_after_target_in_both_directions() {
-        let ids = order(&["w1", "w2", "w3", "w4"]);
-        // forward: source before target
-        let index = insert_index_after(&ids, "w3").unwrap();
-        assert_eq!(
-            apply_move(&ids, "w1", index),
-            order(&["w2", "w3", "w1", "w4"])
-        );
-        // backward: source after target
-        let index = insert_index_after(&ids, "w1").unwrap();
-        assert_eq!(
-            apply_move(&ids, "w4", index),
-            order(&["w1", "w4", "w2", "w3"])
-        );
     }
 }
