@@ -2830,7 +2830,7 @@ mod tests {
         let mut state = app_with_workspaces(&["a", "b", "c", "d"]);
         state.move_workspace(0, 2 + 1); // a after c, moving forward
         assert_eq!(names(&state), vec!["b", "c", "a", "d"]);
-        state.move_workspace(3, 0 + 1); // d after b, moving backward
+        state.move_workspace(3, 1); // d after b (position 0, + 1), moving backward
         assert_eq!(names(&state), vec!["b", "d", "c", "a"]);
     }
 
