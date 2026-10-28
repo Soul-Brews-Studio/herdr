@@ -778,6 +778,8 @@ mod tests {
 
     #[test]
     fn config_diagnostic_summary_uses_compact_actionable_banner() {
+        // the summary names the file from config_path(), which reads HERDR_CONFIG_PATH
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let diagnostics = vec![
             "one".to_string(),
             "two".to_string(),
@@ -794,6 +796,8 @@ mod tests {
 
     #[test]
     fn config_diagnostic_summary_reports_unknown_keys_compactly() {
+        // the summary names the file from config_path(), which reads HERDR_CONFIG_PATH
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let diagnostics = vec![
             "unknown config key ui.mouse_captur; ignoring key".to_string(),
             "unknown config key keys.new_tabb; ignoring key".to_string(),
@@ -807,6 +811,8 @@ mod tests {
 
     #[test]
     fn config_diagnostic_summary_keeps_mixed_diagnostics_generic() {
+        // the summary names the file from config_path(), which reads HERDR_CONFIG_PATH
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let diagnostics = vec![
             "invalid ui config: invalid type: string; keeping current ui settings".to_string(),
             "unknown config key keys.new_tabb; ignoring key".to_string(),
@@ -820,6 +826,8 @@ mod tests {
 
     #[test]
     fn config_diagnostic_summary_reports_default_fallback() {
+        // the summary names the file from config_path(), which reads HERDR_CONFIG_PATH
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let diagnostics = vec![
             "config parse error: TOML parse error at line 33, column 8\n   |\n33 | type = \"popup\"\n   |        ^^^^^^^\nunknown variant `popup`; using defaults"
                 .to_string(),
@@ -833,6 +841,8 @@ mod tests {
 
     #[test]
     fn config_diagnostic_summary_reports_unreadable_config_impact() {
+        // the summary names the file from config_path(), which reads HERDR_CONFIG_PATH
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let startup = vec!["config read error: permission denied; using defaults".to_string()];
         assert_eq!(
             config_diagnostic_summary(&startup).as_deref(),
@@ -849,6 +859,8 @@ mod tests {
 
     #[test]
     fn config_diagnostic_summary_reports_retained_live_config() {
+        // the summary names the file from config_path(), which reads HERDR_CONFIG_PATH
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let diagnostics = vec![
             "config parse error: TOML parse error at line 7, column 4; keeping current config"
                 .to_string(),
