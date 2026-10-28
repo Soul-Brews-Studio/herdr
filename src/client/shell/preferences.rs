@@ -94,6 +94,85 @@ pub(crate) fn store_collapsed_machines(
     store(path, preferences)
 }
 
+/// Folded space groups of one sidebar section: the local machine (`None`) or a saved SSH
+/// machine's profile id. Keys are the groups' repo keys.
+pub(crate) fn load_collapsed_groups(
+    path: &Path,
+    profile_id: Option<&str>,
+) -> Result<Vec<String>, String> {
+    let Some(preferences) = read(path)? else {
+        return Ok(Vec::new());
+    };
+    let mut groups = match profile_id {
+        None => preferences.collapsed_groups,
+        Some(profile_id) => preferences
+            .remote_collapsed_groups
+            .into_iter()
+            .filter(|saved| saved.profile_id == profile_id)
+            .flat_map(|saved| saved.collapsed_groups)
+            .collect(),
+    };
+    groups.sort();
+    groups.dedup();
+    Ok(groups)
+}
+
+/// Replaces the folded groups of one sidebar section, keeping every other saved preference.
+pub(crate) fn store_collapsed_groups(
+    path: &Path,
+    profile_id: Option<&str>,
+    mut groups: Vec<String>,
+) -> Result<(), String> {
+    let mut preferences = read(path)?.unwrap_or_default();
+    groups.sort();
+    groups.dedup();
+    match profile_id {
+        None => preferences.collapsed_groups = groups,
+        Some(profile_id) => {
+            preferences
+                .remote_collapsed_groups
+                .retain(|saved| saved.profile_id != profile_id);
+            if !groups.is_empty() {
+                preferences
+                    .remote_collapsed_groups
+                    .push(ClientRemoteCollapsedGroups {
+                        profile_id: profile_id.to_owned(),
+                        collapsed_groups: groups,
+                    });
+            }
+        }
+    }
+    store(path, preferences)
+}
+
+/// Every folded space group in a preferences file, as a client watches it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SavedGroupFolds {
+    pub(crate) local: Vec<String>,
+    pub(crate) remote: Vec<(String, Vec<String>)>,
+}
+
+pub(crate) fn load_group_folds(path: &Path) -> Result<SavedGroupFolds, String> {
+    let Some(preferences) = read(path)? else {
+        return Ok(SavedGroupFolds::default());
+    };
+    let mut local = preferences.collapsed_groups;
+    local.sort();
+    local.dedup();
+    let mut remote = preferences
+        .remote_collapsed_groups
+        .into_iter()
+        .map(|saved| {
+            let mut groups = saved.collapsed_groups;
+            groups.sort();
+            groups.dedup();
+            (saved.profile_id, groups)
+        })
+        .collect::<Vec<_>>();
+    remote.sort();
+    Ok(SavedGroupFolds { local, remote })
+}
+
 pub(super) fn load(path: &Path) -> Option<ClientChromePreferences> {
     let content = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&content).ok()
@@ -193,6 +272,58 @@ mod tests {
 
         std::fs::write(&path, "not json").expect("corrupt preferences");
         assert!(store_collapsed_machines(&path, Vec::new()).is_err());
+        assert_eq!(std::fs::read_to_string(&path).expect("kept"), "not json");
+        std::fs::remove_file(path).expect("remove preferences");
+    }
+
+    #[test]
+    fn collapsed_groups_store_per_section_and_keep_other_preferences() {
+        let path = std::env::temp_dir().join(format!(
+            "herdr-shell-collapsed-groups-{}.json",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        assert!(load_collapsed_groups(&path, None)
+            .expect("missing file")
+            .is_empty());
+        store(
+            &path,
+            ClientChromePreferences {
+                sidebar_width: Some(30),
+                collapsed_machines: vec!["local".into()],
+                ..ClientChromePreferences::default()
+            },
+        )
+        .expect("seed preferences");
+        store_collapsed_groups(&path, None, vec!["/b".into(), "/a".into(), "/b".into()])
+            .expect("store local");
+        store_collapsed_groups(&path, Some("p1"), vec!["/r".into()]).expect("store remote");
+        assert_eq!(
+            load_collapsed_groups(&path, None).expect("local"),
+            ["/a", "/b"]
+        );
+        assert_eq!(
+            load_collapsed_groups(&path, Some("p1")).expect("remote"),
+            ["/r"]
+        );
+        assert!(load_collapsed_groups(&path, Some("p2"))
+            .expect("other remote")
+            .is_empty());
+        assert_eq!(
+            load_group_folds(&path).expect("folds"),
+            SavedGroupFolds {
+                local: vec!["/a".into(), "/b".into()],
+                remote: vec![("p1".into(), vec!["/r".into()])],
+            }
+        );
+        store_collapsed_groups(&path, Some("p1"), Vec::new()).expect("clear remote");
+        let saved = load(&path).expect("preferences");
+        assert!(saved.remote_collapsed_groups.is_empty());
+        assert_eq!(saved.sidebar_width, Some(30));
+        assert_eq!(saved.collapsed_machines, ["local"]);
+
+        std::fs::write(&path, "not json").expect("corrupt preferences");
+        assert!(store_collapsed_groups(&path, None, Vec::new()).is_err());
         assert_eq!(std::fs::read_to_string(&path).expect("kept"), "not json");
         std::fs::remove_file(path).expect("remove preferences");
     }

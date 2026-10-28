@@ -3001,3 +3001,19 @@ fn session_folds_open_only_machines_of_this_session() {
     );
     std::fs::remove_file(path).expect("remove client chrome preferences");
 }
+
+#[test]
+fn saved_group_folds_from_other_processes_apply_once() {
+    let (mut state, remote_id) = state_with_remote();
+    let saved = crate::client::shell_preferences::SavedGroupFolds {
+        local: vec!["/repo/.git".to_owned()],
+        remote: vec![(remote_profile().id.to_string(), vec!["/r/.git".to_owned()])],
+    };
+    assert!(state.apply_saved_group_folds(saved.clone()));
+    assert!(state.group_is_collapsed(&ClientEndpointId::Local, "/repo/.git"));
+    assert!(state.group_is_collapsed(&remote_id, "/r/.git"));
+    assert!(!state.apply_saved_group_folds(saved));
+    assert!(state.apply_saved_group_folds(Default::default()));
+    assert!(!state.group_is_collapsed(&ClientEndpointId::Local, "/repo/.git"));
+    assert!(!state.group_is_collapsed(&remote_id, "/r/.git"));
+}

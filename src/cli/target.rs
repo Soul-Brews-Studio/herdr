@@ -63,6 +63,16 @@ pub(super) fn is_remote() -> bool {
     TARGET.with(|target| target.borrow().is_some())
 }
 
+/// Profile id of the `--machine` target, when there is one.
+pub(super) fn remote_profile_id() -> Option<String> {
+    TARGET.with(|target| {
+        target
+            .borrow()
+            .as_ref()
+            .map(|target| target.profile.id.to_string())
+    })
+}
+
 pub(super) fn api_client() -> io::Result<ApiClient> {
     TARGET.with(|target| {
         let mut target = target.borrow_mut();
@@ -299,6 +309,8 @@ fn validate_machine_command(args: &[String]) -> Result<(), String> {
     let subcommand = args.get(2).map(String::as_str).unwrap_or_default();
     let supported = match command {
         "workspace" | "worktree" | "tab" | "pane" | "notification" => true,
+        // reads the machine's spaces over its API, folds them in this client's sidebar
+        "space" => true,
         "agent" => {
             subcommand != "attach"
                 && !(subcommand == "explain"

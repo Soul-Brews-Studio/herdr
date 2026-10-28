@@ -27,6 +27,8 @@ pub(super) enum ClientLoopEvent {
     EndpointCatalog(Result<Vec<endpoint::SavedSshEndpoint>, String>),
     /// Folded machines read back from this client's preferences file.
     MachineFolds(Vec<String>),
+    /// Folded space groups read back from this client's preferences file.
+    GroupFolds(shell::preferences::SavedGroupFolds),
     ActivateEndpoint {
         endpoint_id: endpoint::ClientEndpointId,
         target: Option<shell::ClientEndpointFocusTarget>,

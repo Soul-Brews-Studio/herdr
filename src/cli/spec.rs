@@ -4,6 +4,7 @@ use clap::{Arg, ArgAction, ArgGroup, Command, ValueHint};
 
 mod completion;
 mod machine;
+mod space;
 
 pub(super) fn command() -> Command {
     let command = Command::new("herdr")
@@ -35,6 +36,7 @@ pub(super) fn command() -> Command {
         .subcommand(config_command())
         .subcommand(channel_command())
         .subcommand(machine::command())
+        .subcommand(space::command())
         .subcommand(server_command())
         .subcommand(api_command())
         .subcommand(workspace_command())
