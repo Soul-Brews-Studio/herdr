@@ -5627,8 +5627,8 @@ function Get-Process {
             .is_some_and(|name| name.to_string_lossy().starts_with("herdr-r-")));
     }
 
-    #[cfg(unix)]
-    // the one process-wide env lock, shared with every other test that changes HOME
+    // the one process-wide env lock, shared with every other test that changes HOME;
+    // unix and windows tests both take it
     fn remote_env_lock() -> &'static std::sync::Mutex<()> {
         crate::config::test_config_env_lock()
     }
