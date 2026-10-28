@@ -405,11 +405,15 @@ fn create_generation(base: &Path) -> io::Result<Generation> {
         }
         validate_directory(base)?;
         remove_stale_generations(base);
+        // The clock alone repeats when two stores in one process start in the same tick
+        // (macOS reads microseconds), and create_dir then fails the export.
+        static NEXT_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let root = base.join(format!("server-{}-{nonce}", std::process::id()));
+        let sequence = NEXT_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = base.join(format!("server-{}-{nonce}-{sequence}", std::process::id()));
         fs::create_dir(&root)?;
         fs::set_permissions(&root, fs::Permissions::from_mode(DIRECTORY_MODE))?;
         let source = root.join("source");

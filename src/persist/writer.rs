@@ -273,9 +273,12 @@ mod tests {
     use super::*;
 
     fn writer(protect_unloaded: bool) -> SessionWriter {
+        // the clock alone repeats across parallel tests on macOS; add a counter
+        static NEXT_DIRECTORY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let directory = std::env::temp_dir().join(format!(
-            "herdr-session-recovery-{}-{}",
+            "herdr-session-recovery-{}-{}-{}",
             std::process::id(),
+            NEXT_DIRECTORY.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()

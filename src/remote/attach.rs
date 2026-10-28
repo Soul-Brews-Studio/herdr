@@ -3813,6 +3813,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn managed_ssh_config_includes_user_config_then_fallback() {
+        // write_managed_ssh_config builds its paths from HOME; hold the shared env lock
+        let _guard = remote_env_lock().lock().unwrap();
         use std::os::unix::fs::PermissionsExt;
 
         let managed_config = write_managed_ssh_config("example").expect("write managed config");
@@ -3878,6 +3880,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn shared_ssh_transport_survives_helper_config_drop() {
+        // write_managed_ssh_config builds its paths from HOME; hold the shared env lock
+        let _guard = remote_env_lock().lock().unwrap();
         let first = write_managed_ssh_config("example").unwrap();
         let second = write_managed_ssh_config("example").unwrap();
         let socket = first.options.control_path.clone().unwrap();
@@ -3913,6 +3917,8 @@ mod tests {
 
     #[test]
     fn bridge_options_keep_temporary_config_alive_after_helper_drop() {
+        // write_managed_ssh_config builds its paths from HOME; hold the shared env lock
+        let _guard = remote_env_lock().lock().unwrap();
         let config = write_managed_ssh_config("example").unwrap();
         let path = config.options.config_path.clone();
         let worker_options = config.options.clone();
@@ -3925,6 +3931,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn authentication_command_uses_shared_transport_without_askpass_or_host_key_relaxation() {
+        // write_managed_ssh_config builds its paths from HOME; hold the shared env lock
+        let _guard = remote_env_lock().lock().unwrap();
         let config = write_managed_ssh_config("example").unwrap();
         let setup = RemoteSsh::new("example".into(), true, "other-session".into());
         assert_eq!(
@@ -3986,6 +3994,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn remote_ssh_command_uses_managed_config_when_present() {
+        // write_managed_ssh_config builds its paths from HOME; hold the shared env lock
+        let _guard = remote_env_lock().lock().unwrap();
         let managed_config = write_managed_ssh_config("example").expect("write managed config");
         let config_path = managed_config.options.config_path.clone();
         let control_path = managed_config.options.control_path.clone().unwrap();
@@ -4043,6 +4053,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_managed_ssh_config_uses_keepalives_without_control_socket() {
+        // write_managed_ssh_config builds its paths from HOME; hold the shared env lock
+        let _guard = remote_env_lock().lock().unwrap();
         let managed_config = write_managed_ssh_config("example").expect("write managed config");
         let config_path = managed_config.options.config_path.clone();
         assert!(managed_config.options.control_path.is_none());
@@ -5615,10 +5627,10 @@ function Get-Process {
             .is_some_and(|name| name.to_string_lossy().starts_with("herdr-r-")));
     }
 
-    #[cfg(unix)]
+    // the one process-wide env lock, shared with every other test that changes HOME;
+    // unix and windows tests both take it
     fn remote_env_lock() -> &'static std::sync::Mutex<()> {
-        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+        crate::config::test_config_env_lock()
     }
 
     #[cfg(unix)]
