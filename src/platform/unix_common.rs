@@ -253,6 +253,7 @@ pub(super) fn read_terminal_grid_size() -> std::io::Result<(u16, u16)> {
     crossterm::terminal::window_size().map(|size| (size.columns, size.rows))
 }
 
+#[cfg_attr(test, allow(dead_code))]
 fn set_sigpipe_disposition(handler: libc::sighandler_t) {
     let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
     action.sa_sigaction = handler;
@@ -335,11 +336,17 @@ pub(crate) fn local_stream_peer_description(stream: &crate::ipc::LocalStream) ->
     Some(description)
 }
 
+/// Lets `herdr ... | head` end quietly on a closed pipe, like other CLIs. The disposition
+/// is process-wide, so the test binary keeps Rust's ignored SIGPIPE: once any CLI test
+/// printed, a later test writing to a closed pipe (pty, remote bridge) would kill the
+/// whole run with signal 13 instead of failing that test.
 pub(crate) fn begin_cli_output() {
+    #[cfg(not(test))]
     set_sigpipe_disposition(libc::SIG_DFL);
 }
 
 pub(crate) fn end_cli_output() {
+    #[cfg(not(test))]
     set_sigpipe_disposition(libc::SIG_IGN);
 }
 
