@@ -2816,6 +2816,24 @@ mod tests {
         assert_eq!(names, vec!["b", "c", "a"]);
     }
 
+    /// `herdr workspace move --after X` sends X's position + 1; pin that this
+    /// lands right after X whichever side of X the workspace starts on.
+    #[test]
+    fn move_workspace_after_target_is_position_plus_one() {
+        let names = |state: &AppState| -> Vec<String> {
+            state
+                .workspaces
+                .iter()
+                .map(|ws| ws.display_name())
+                .collect()
+        };
+        let mut state = app_with_workspaces(&["a", "b", "c", "d"]);
+        state.move_workspace(0, 2 + 1); // a after c, moving forward
+        assert_eq!(names(&state), vec!["b", "c", "a", "d"]);
+        state.move_workspace(3, 1); // d after b (position 0, + 1), moving backward
+        assert_eq!(names(&state), vec!["b", "d", "c", "a"]);
+    }
+
     #[test]
     fn move_workspace_block_collects_non_contiguous_members() {
         let mut state =

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::api::schema::{
-    Method, WorkspaceCreateParams, WorkspaceRenameParams, WorkspaceReportMetadataParams,
+    Method, Request, WorkspaceCreateParams, WorkspaceMoveParams, WorkspaceRenameParams,
+    WorkspaceReportMetadataParams,
 };
 
 pub(super) fn run_workspace_command(args: &[String]) -> std::io::Result<i32> {
@@ -16,6 +17,7 @@ pub(super) fn run_workspace_command(args: &[String]) -> std::io::Result<i32> {
         "get" => workspace_get(&args[1..]),
         "focus" => workspace_focus(&args[1..]),
         "rename" => workspace_rename(&args[1..]),
+        "move" => workspace_move(&args[1..]),
         "report-metadata" => workspace_report_metadata(&args[1..]),
         "close" => workspace_close(&args[1..]),
         "help" | "--help" | "-h" => {
@@ -140,6 +142,123 @@ fn workspace_rename(args: &[String]) -> std::io::Result<i32> {
     })
 }
 
+const WORKSPACE_MOVE_USAGE: &str =
+    "usage: herdr workspace move <workspace_id> (--after <workspace_id> | --index N)";
+
+#[derive(Debug, PartialEq, Eq)]
+enum MoveTarget {
+    After(String),
+    Index(usize),
+}
+
+fn parse_move_args(args: &[String]) -> Result<(String, MoveTarget), String> {
+    let mut workspace_id = None;
+    let mut target = None;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        let (flag, inline) = match arg.split_once('=') {
+            Some((flag, value)) if flag.starts_with("--") => (flag, Some(value.to_string())),
+            _ => (arg, None),
+        };
+        match flag {
+            "--after" | "--index" => {
+                let value = match inline {
+                    Some(value) => value,
+                    None => {
+                        index += 1;
+                        args.get(index)
+                            .cloned()
+                            .ok_or_else(|| format!("missing value for {flag}"))?
+                    }
+                };
+                if target.is_some() {
+                    return Err(WORKSPACE_MOVE_USAGE.to_string());
+                }
+                target = Some(if flag == "--after" {
+                    MoveTarget::After(super::normalize_workspace_id(&value))
+                } else {
+                    MoveTarget::Index(
+                        value
+                            .parse::<usize>()
+                            .map_err(|_| format!("invalid value for --index: {value}"))?,
+                    )
+                });
+            }
+            other if other.starts_with("--") => return Err(format!("unknown option: {other}")),
+            _ if workspace_id.is_none() => workspace_id = Some(super::normalize_workspace_id(arg)),
+            _ => return Err(WORKSPACE_MOVE_USAGE.to_string()),
+        }
+        index += 1;
+    }
+    match (workspace_id, target) {
+        (Some(workspace_id), Some(target)) => Ok((workspace_id, target)),
+        _ => Err(WORKSPACE_MOVE_USAGE.to_string()),
+    }
+}
+
+/// `insert_index` is a gap index counted before the moved workspace is taken
+/// out (the server subtracts one when moving forward), so "after X" is always
+/// X's current position + 1, whichever side of X the workspace starts on.
+fn insert_index_after(order: &[String], after: &str) -> Result<usize, String> {
+    order
+        .iter()
+        .position(|id| id == after)
+        .map(|position| position + 1)
+        .ok_or_else(|| format!("workspace {after} not found"))
+}
+
+fn workspace_move(args: &[String]) -> std::io::Result<i32> {
+    let (workspace_id, target) = match parse_move_args(args) {
+        Ok(parsed) => parsed,
+        Err(message) => {
+            eprintln!("{message}");
+            return Ok(2);
+        }
+    };
+
+    let insert_index = match target {
+        MoveTarget::Index(index) => index,
+        MoveTarget::After(after) => {
+            let response = super::send_request(&Request {
+                id: "cli:workspace:move:list".into(),
+                method: Method::WorkspaceList(Default::default()),
+            })?;
+            if response.get("error").is_some() {
+                eprintln!("{}", serde_json::to_string(&response).unwrap());
+                return Ok(1);
+            }
+            let order = response["result"]["workspaces"]
+                .as_array()
+                .map(|workspaces| {
+                    workspaces
+                        .iter()
+                        .filter_map(|workspace| workspace["workspace_id"].as_str())
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            match insert_index_after(&order, &after) {
+                Ok(index) => index,
+                Err(message) => {
+                    // same shape as the server's own workspace_not_found
+                    let error = serde_json::json!({
+                        "error": {"code": "workspace_not_found", "message": message},
+                        "id": "cli:workspace:move",
+                    });
+                    eprintln!("{error}");
+                    return Ok(1);
+                }
+            }
+        }
+    };
+
+    super::runtime::workspace_move(WorkspaceMoveParams {
+        workspace_id,
+        insert_index,
+    })
+}
+
 fn workspace_report_metadata(args: &[String]) -> std::io::Result<i32> {
     let Some(raw_workspace_id) = args.first() else {
         eprintln!("usage: herdr workspace report-metadata <workspace_id> --source ID [--token NAME=VALUE] [--clear-token NAME] [--seq N] [--ttl-ms N]");
@@ -248,6 +367,58 @@ fn print_workspace_help() {
     eprintln!("  herdr workspace get <workspace_id>");
     eprintln!("  herdr workspace focus <workspace_id>");
     eprintln!("  herdr workspace rename <workspace_id> <label>");
+    eprintln!("  herdr workspace move <workspace_id> (--after <workspace_id> | --index N)");
     eprintln!("  herdr workspace report-metadata <workspace_id> --source ID [--token NAME=VALUE] [--clear-token NAME] [--seq N] [--ttl-ms N]");
     eprintln!("  herdr workspace close <workspace_id> [--group]");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    fn order(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|id| id.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_move_after_and_index() {
+        assert_eq!(
+            parse_move_args(&args(&["w3", "--after", "w1"])),
+            Ok(("w3".into(), MoveTarget::After("w1".into())))
+        );
+        assert_eq!(
+            parse_move_args(&args(&["w3", "--index", "0"])),
+            Ok(("w3".into(), MoveTarget::Index(0)))
+        );
+        assert_eq!(
+            parse_move_args(&args(&["--after=w1", "w3"])),
+            Ok(("w3".into(), MoveTarget::After("w1".into())))
+        );
+        assert_eq!(
+            parse_move_args(&args(&["--index", "2", "w3"])),
+            Ok(("w3".into(), MoveTarget::Index(2)))
+        );
+    }
+
+    #[test]
+    fn parse_move_rejects_bad_input() {
+        assert!(parse_move_args(&args(&["w3"])).is_err());
+        assert!(parse_move_args(&args(&["w3", "--index", "-1"])).is_err());
+        assert!(parse_move_args(&args(&["w3", "--after", "w1", "--index", "2"])).is_err());
+        assert!(parse_move_args(&args(&["w3", "--before", "w1"])).is_err());
+        assert!(parse_move_args(&args(&["w3", "w4", "--index", "1"])).is_err());
+        assert!(parse_move_args(&args(&["w3", "--after"])).is_err());
+    }
+
+    #[test]
+    fn insert_index_after_is_target_position_plus_one() {
+        let ids = order(&["w1", "w2", "w3", "w4"]);
+        assert_eq!(insert_index_after(&ids, "w1"), Ok(1));
+        assert_eq!(insert_index_after(&ids, "w4"), Ok(4));
+        assert!(insert_index_after(&ids, "w9").is_err());
+    }
 }

@@ -217,6 +217,18 @@ fn workspace_command() -> Command {
                 .arg(required("label", "LABEL").num_args(1..)),
         )
         .subcommand(
+            Command::new("move")
+                .about("Move a workspace in the sidebar order")
+                .arg(required("workspace_id", "WORKSPACE_ID"))
+                .arg(option("after", "WORKSPACE_ID"))
+                .arg(option("index", "N"))
+                .group(
+                    ArgGroup::new("position")
+                        .args(["after", "index"])
+                        .required(true),
+                ),
+        )
+        .subcommand(
             Command::new("report-metadata")
                 .about("Report display-only workspace metadata")
                 .arg(required("workspace_id", "WORKSPACE_ID"))
