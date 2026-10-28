@@ -1927,4 +1927,33 @@ impl ClientShellState {
         self.collapsed_endpoints = next;
         true
     }
+
+    /// Adopts space-group folds another process wrote to this client's preferences file,
+    /// such as `herdr space fold`. Returns whether the sidebar changed.
+    pub(crate) fn apply_saved_group_folds(&mut self, saved: preferences::SavedGroupFolds) -> bool {
+        let local = saved.local.into_iter().collect::<HashSet<_>>();
+        let mut remote = HashMap::<ClientEndpointId, HashSet<String>>::new();
+        for (profile_id, groups) in saved.remote {
+            let Ok(profile_id) = crate::client::endpoint::ProfileId::parse(profile_id) else {
+                continue;
+            };
+            remote
+                .entry(ClientEndpointId::Ssh(profile_id))
+                .or_default()
+                .extend(groups);
+        }
+        let current_remote = self
+            .remote_collapsed_groups
+            .iter()
+            .filter(|(_, groups)| !groups.is_empty())
+            .map(|(id, groups)| (id.clone(), groups.clone()))
+            .collect::<HashMap<_, _>>();
+        remote.retain(|_, groups| !groups.is_empty());
+        if local == self.collapsed_groups && remote == current_remote {
+            return false;
+        }
+        self.collapsed_groups = local;
+        self.remote_collapsed_groups = remote;
+        true
+    }
 }

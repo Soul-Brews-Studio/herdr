@@ -163,6 +163,23 @@ herdr session delete <name> [--json]
 
 Use `default` as the session name when you need to stop the default session explicitly.
 
+## Space groups
+
+```bash
+herdr space fold (<group>... | --all) [--json]
+herdr space unfold (<group>... | --all) [--json]
+herdr space toggle <group>... [--json]
+herdr space fold-others [<group>] [--json]
+herdr space folds [--json]
+```
+
+A space group is a repo's main space with its worktree spaces under it (the ▾ arrow in the sidebar). `<group>` is the main space's label, the repo name, a path inside the repo, or the id of any workspace in the group. `fold-others` folds every other group, or unfolds all when the others are already folded; without `<group>` it keeps the focused workspace's group open. Folds are this client's sidebar state: open clients apply them within a second, and they survive a client restart. Use `herdr --machine <label> space ...` for a saved SSH machine's groups.
+
+```bash
+herdr space toggle manager-team
+herdr space fold-others
+```
+
 ## Workspaces
 
 ```bash

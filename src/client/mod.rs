@@ -682,6 +682,11 @@ async fn run_client_loop(
                 event_tx.clone(),
                 should_quit.clone(),
             );
+            catalog_reload::watch_group_folds(
+                path.to_path_buf(),
+                event_tx.clone(),
+                should_quit.clone(),
+            );
         }
     }
 
@@ -843,11 +848,16 @@ async fn run_client_loop(
 
         match event {
             ClientLoopEvent::EndpointCatalog(reload) => pending_catalog = Some(reload),
-            ClientLoopEvent::MachineFolds(saved) => {
+            ClientLoopEvent::MachineFolds(_) | ClientLoopEvent::GroupFolds(_) => {
                 let Some(shell) = state.shell.as_mut() else {
                     continue;
                 };
-                if !shell.apply_saved_machine_folds(saved) {
+                let changed = match event {
+                    ClientLoopEvent::MachineFolds(saved) => shell.apply_saved_machine_folds(saved),
+                    ClientLoopEvent::GroupFolds(saved) => shell.apply_saved_group_folds(saved),
+                    _ => false,
+                };
+                if !changed {
                     continue;
                 }
                 let frame = shell.compose(state.reported_size.0, state.reported_size.1);
