@@ -1439,7 +1439,10 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let filename = format!("h{}-{nanos}.sock", std::process::id());
+        // the macOS clock ticks in microseconds, so parallel tests need the counter too
+        static NEXT_SOCKET: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let sequence = NEXT_SOCKET.fetch_add(1, Ordering::Relaxed);
+        let filename = format!("h{}-{nanos}-{sequence}.sock", std::process::id());
         #[cfg(unix)]
         {
             let _ = name;
