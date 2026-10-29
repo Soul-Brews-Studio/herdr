@@ -92,10 +92,32 @@ pub fn clear_history() {
 }
 
 pub fn load() -> Option<SessionSnapshot> {
-    let path = session_path();
+    load_from_path(&session_path())
+}
+
+pub(super) fn load_from_path(path: &Path) -> Option<SessionSnapshot> {
+    let path = path.to_path_buf();
     let content = match std::fs::read_to_string(&path) {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            if super::writer::cleared_marker_path(&path).exists() {
+                tracing::info!(
+                    event = "persist.restore", subsystem = "persist", outcome = "cleared",
+                    path = %path.display(), "session file was cleared on purpose; nothing to restore"
+                );
+                return None;
+            }
+            // A session file that vanished without a deliberate clear (a shutdown that lost it, a
+            // restart during shutdown): start from the newest snapshot that still has spaces.
+            if let Some((from, snapshot)) = super::writer::newest_snapshot_with_spaces(&path) {
+                warn!(
+                    event = "persist.restore", subsystem = "persist", outcome = "snapshot_fallback",
+                    path = %path.display(), snapshot = %from.display(),
+                    workspaces = snapshot.workspaces.len(),
+                    "session file is missing; restoring the newest session snapshot"
+                );
+                return Some(snapshot);
+            }
             tracing::info!(
                 event = "persist.restore", subsystem = "persist", outcome = "missing",
                 path = %path.display(), "session file is missing"

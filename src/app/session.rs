@@ -4,6 +4,9 @@ use super::{App, SESSION_SAVE_DEBOUNCE};
 
 enum SessionSaveJob {
     Clear,
+    /// No spaces left while the server is shutting down: the panes died with the shutdown (SIGTERM,
+    /// HUP'd shells), not by the user, so the last saved session stays (white laris-co, 2026-10-29).
+    KeepOnShutdown,
     Save {
         snapshot: crate::persist::SessionSnapshot,
         history: Option<crate::persist::SessionHistorySnapshot>,
@@ -39,7 +42,11 @@ impl App {
 
     fn capture_session_save_job(&self) -> SessionSaveJob {
         if self.state.workspaces.is_empty() {
-            SessionSaveJob::Clear
+            if self.state.should_quit {
+                SessionSaveJob::KeepOnShutdown
+            } else {
+                SessionSaveJob::Clear
+            }
         } else {
             let snapshot = crate::persist::capture(
                 &self.state.workspaces,
@@ -142,6 +149,12 @@ fn run_session_save_job(
     };
     match job {
         SessionSaveJob::Clear => writer.clear(),
+        SessionSaveJob::KeepOnShutdown => tracing::info!(
+            event = "persist.save",
+            subsystem = "persist",
+            outcome = "kept_on_shutdown",
+            "no spaces left during shutdown; keeping the last saved session"
+        ),
         SessionSaveJob::Save { snapshot, history } => writer.save(&snapshot, history.as_ref()),
     }
 }
