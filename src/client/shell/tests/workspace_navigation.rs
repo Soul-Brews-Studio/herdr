@@ -1137,13 +1137,12 @@ fn two_group_workspaces(focused: &str) -> ClientShellSnapshot {
 
 #[test]
 fn space_fold_keys_fold_the_focused_group_and_the_others() {
+    // pid + a counter: the macOS clock ticks in microseconds, so nanos alone can repeat (#8)
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
         "herdr-client-shell-space-folds-{}-{}.json",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let _ = std::fs::remove_file(&path);
     let (mut state, _) = navigation_state(two_group_workspaces("ws_1"));
