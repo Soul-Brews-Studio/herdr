@@ -460,6 +460,12 @@ pub struct KeysConfig {
     /// Fold every machine except the one under the navigate cursor, else the active machine; when the
     /// others are already folded, unfold all machines. Unset by default.
     pub collapse_other_machines: BindingConfig,
+    /// Fold or unfold the space group (a repo's main checkout with its worktrees) of the workspace
+    /// under the navigate cursor, else of the focused workspace. Unset by default.
+    pub toggle_space_collapse: BindingConfig,
+    /// Fold every other space group of that machine and unfold this one; when the others are
+    /// already folded, unfold all groups. Unset by default.
+    pub collapse_other_spaces: BindingConfig,
     /// Optional indexed shortcuts expanded over number keys 1-9.
     pub indexed: IndexedKeysConfig,
     /// Prefix-mode custom command bindings.
@@ -601,6 +607,10 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     collapse_other_machines: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    toggle_space_collapse: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    collapse_other_spaces: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     indexed: Option<IndexedKeysConfig>,
     #[serde(skip_serializing)]
     command: Option<Vec<CommandKeybindConfig>>,
@@ -714,6 +724,8 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(toggle_sidebar);
         apply_field!(toggle_machine_collapse);
         apply_field!(collapse_other_machines);
+        apply_field!(toggle_space_collapse);
+        apply_field!(collapse_other_spaces);
         apply_field!(indexed);
         apply_field!(command);
 
@@ -821,6 +833,8 @@ impl KeysConfig {
         copy_effective_action_field!(toggle_sidebar, keybinds.toggle_sidebar);
         copy_effective_action_field!(toggle_machine_collapse, keybinds.toggle_machine_collapse);
         copy_effective_action_field!(collapse_other_machines, keybinds.collapse_other_machines);
+        copy_effective_action_field!(toggle_space_collapse, keybinds.toggle_space_collapse);
+        copy_effective_action_field!(collapse_other_spaces, keybinds.collapse_other_spaces);
         copy_user_field!(indexed);
 
         profile
@@ -1198,6 +1212,8 @@ impl Default for KeysConfig {
             toggle_sidebar: BindingConfig::one("prefix+b"),
             toggle_machine_collapse: BindingConfig::empty(),
             collapse_other_machines: BindingConfig::empty(),
+            toggle_space_collapse: BindingConfig::empty(),
+            collapse_other_spaces: BindingConfig::empty(),
             indexed: IndexedKeysConfig::default(),
             command: Vec::new(),
             user_fields: BTreeSet::new(),

@@ -194,6 +194,8 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # toggle_sidebar = "prefix+b"
 # toggle_machine_collapse = ""  # optional, e.g. "prefix+m" folds the active machine (navigate: the selected one)
 # collapse_other_machines = ""  # optional, e.g. "prefix+shift+m" folds every other machine, again unfolds all
+# toggle_space_collapse = ""  # optional, e.g. "prefix+g" folds the repo group of the focused space (navigate: the selected one)
+# collapse_other_spaces = ""  # optional, e.g. "prefix+shift+g" folds every other repo group, again unfolds all
 
 # Navigate-mode movement. These local shortcuts win while navigate mode is open.
 # They are independent from focus_pane_*. Do not include prefix+, esc, enter, tab, or 1..9 here.

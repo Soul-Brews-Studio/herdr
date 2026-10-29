@@ -405,6 +405,8 @@ pub struct Keybinds {
     pub toggle_sidebar: ActionKeybinds,
     pub toggle_machine_collapse: ActionKeybinds,
     pub collapse_other_machines: ActionKeybinds,
+    pub toggle_space_collapse: ActionKeybinds,
+    pub collapse_other_spaces: ActionKeybinds,
     pub custom_commands: Vec<CustomCommandKeybind>,
 }
 
@@ -590,6 +592,8 @@ impl Config {
             toggle_sidebar: empty_action!(),
             toggle_machine_collapse: empty_action!(),
             collapse_other_machines: empty_action!(),
+            toggle_space_collapse: empty_action!(),
+            collapse_other_spaces: empty_action!(),
             custom_commands: Vec::new(),
         };
 
@@ -746,6 +750,16 @@ impl Config {
             apply_action!(
                 keybinds.collapse_other_machines,
                 collapse_other_machines,
+                source
+            );
+            apply_action!(
+                keybinds.toggle_space_collapse,
+                toggle_space_collapse,
+                source
+            );
+            apply_action!(
+                keybinds.collapse_other_spaces,
+                collapse_other_spaces,
                 source
             );
 

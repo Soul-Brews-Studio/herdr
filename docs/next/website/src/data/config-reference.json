@@ -854,6 +854,18 @@
           "description": "Fold every sidebar machine except the one of the selected workspace in navigate mode, otherwise the active machine, and unfold that one. When every other machine is already folded, unfold all machines instead. Unset by default."
         },
         {
+          "key": "keys.toggle_space_collapse",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Fold or unfold a space group (a repo's main checkout with its worktrees) in the sidebar: the group of the selected workspace in navigate mode, otherwise of the focused workspace. Same state as the group arrow and herdr space fold, remembered across restarts. Unset by default; for example, toggle_space_collapse = \"prefix+g\"."
+        },
+        {
+          "key": "keys.collapse_other_spaces",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Fold every other space group on that machine and unfold this one (the group of the selected workspace in navigate mode, otherwise of the focused workspace). When every other group is already folded, unfold all groups instead, like herdr space fold-others. Unset by default."
+        },
+        {
           "key": "keys.indexed.tabs",
           "type": "string",
           "default": "unset",
