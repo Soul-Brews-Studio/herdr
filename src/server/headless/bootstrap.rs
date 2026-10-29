@@ -43,9 +43,9 @@ pub fn run_server() -> io::Result<()> {
     ) {
         Ok(Some(lock)) => lock,
         Ok(None) => {
-            eprintln!("error: this session's previous herdr server is still shutting down");
+            eprintln!("error: another herdr server for this session is still running or shutting down");
             eprintln!("lock: {}", lock_path.display());
-            warn!(lock = %lock_path.display(), "previous server still holds the session lock; not starting");
+            warn!(lock = %lock_path.display(), "another server still holds the session lock; not starting");
             std::process::exit(1);
         }
         Err(err) => {
