@@ -63,6 +63,8 @@ pub(crate) enum KeybindAction {
     ToggleSidebar,
     ToggleMachineCollapse,
     CollapseOtherMachines,
+    ToggleSpaceCollapse,
+    CollapseOtherSpaces,
     CyclePaneNext,
     CyclePanePrevious,
     LastPane,
@@ -156,6 +158,14 @@ pub(crate) fn resolve_non_indexed_action(
         (
             &keybinds.collapse_other_machines,
             KeybindAction::CollapseOtherMachines,
+        ),
+        (
+            &keybinds.toggle_space_collapse,
+            KeybindAction::ToggleSpaceCollapse,
+        ),
+        (
+            &keybinds.collapse_other_spaces,
+            KeybindAction::CollapseOtherSpaces,
         ),
         (&keybinds.reload_config, KeybindAction::ReloadConfig),
         (
@@ -328,6 +338,33 @@ mod tests {
                 &TerminalKey::new(KeyCode::Char('m'), KeyModifiers::SHIFT)
             ),
             Some(KeybindMatch::Action(KeybindAction::CollapseOtherMachines))
+        ));
+    }
+
+    #[test]
+    fn space_fold_actions_are_unbound_by_default_and_configurable() {
+        let keybinds = crate::config::Config::default().keybinds();
+        assert!(keybinds.toggle_space_collapse.bindings.is_empty());
+        assert!(keybinds.collapse_other_spaces.bindings.is_empty());
+        let config: crate::config::Config = toml::from_str(
+            "[keys]\ntoggle_space_collapse = \"prefix+u\"\ncollapse_other_spaces = \"prefix+shift+u\"",
+        )
+        .unwrap();
+        assert!(config.collect_diagnostics().is_empty());
+        let keybinds = config.keybinds();
+        assert!(matches!(
+            resolve_prefix_binding(
+                &keybinds,
+                &TerminalKey::new(KeyCode::Char('u'), KeyModifiers::empty())
+            ),
+            Some(KeybindMatch::Action(KeybindAction::ToggleSpaceCollapse))
+        ));
+        assert!(matches!(
+            resolve_prefix_binding(
+                &keybinds,
+                &TerminalKey::new(KeyCode::Char('u'), KeyModifiers::SHIFT)
+            ),
+            Some(KeybindMatch::Action(KeybindAction::CollapseOtherSpaces))
         ));
     }
 

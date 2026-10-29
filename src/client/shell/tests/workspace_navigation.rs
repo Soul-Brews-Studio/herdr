@@ -1116,3 +1116,87 @@ fn collapse_other_machines_toggles_and_is_saved() {
     assert!(state.collapsed_endpoints.is_empty());
     std::fs::remove_file(path).expect("remove client chrome preferences");
 }
+
+fn two_group_workspaces(focused: &str) -> ClientShellSnapshot {
+    let mut projected = workspaces(5);
+    for (index, key, linked) in [
+        (0, "repo-a", false),
+        (1, "repo-a", true),
+        (2, "repo-b", false),
+        (3, "repo-b", true),
+    ] {
+        projected.workspaces[index].worktree = Some(ClientShellWorktree {
+            key: key.into(),
+            label: key.into(),
+            is_linked_worktree: linked,
+        });
+    }
+    projected.focused_workspace_id = Some(focused.into());
+    projected
+}
+
+#[test]
+fn space_fold_keys_fold_the_focused_group_and_the_others() {
+    // pid + a counter: the macOS clock ticks in microseconds, so nanos alone can repeat (#8)
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "herdr-client-shell-space-folds-{}-{}.json",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_file(&path);
+    let (mut state, _) = navigation_state(two_group_workspaces("ws_1"));
+    state.config.preferences_path = Some(path.clone());
+    state.compose(100, 28).unwrap();
+    state.handle_input_bytes(&[0x02]);
+    state.handle_input_bytes(b"u");
+    assert!(state.collapsed_groups.is_empty(), "unbound by default");
+
+    let mut config = Config::default();
+    config.keys.toggle_space_collapse = crate::config::BindingConfig::one("prefix+u");
+    config.keys.collapse_other_spaces = crate::config::BindingConfig::one("prefix+y");
+    state.config.keybinds = ClientShellConfig::from_config(&config).keybinds;
+    let press = |state: &mut ClientShellState, key: &[u8]| {
+        state.handle_input_bytes(&[0x02]);
+        assert!(state.handle_input_bytes(key).repaint);
+        let mut saved = preferences::load(&path)
+            .expect("saved group folds")
+            .collapsed_groups;
+        saved.sort();
+        saved
+    };
+    let set = |keys: &[&str]| {
+        keys.iter()
+            .map(|key| key.to_string())
+            .collect::<HashSet<_>>()
+    };
+
+    // the focused workspace's group (ws_1 = repo-a), written where `herdr space fold` writes
+    assert_eq!(press(&mut state, b"u"), ["repo-a"]);
+    assert_eq!(state.collapsed_groups, set(&["repo-a"]));
+    assert!(press(&mut state, b"u").is_empty());
+
+    // every other group; again, once they are all folded, unfold all
+    assert_eq!(press(&mut state, b"y"), ["repo-b"]);
+    assert!(press(&mut state, b"y").is_empty());
+    state.collapsed_groups = set(&["repo-a"]);
+    assert_eq!(press(&mut state, b"y"), ["repo-b"]);
+
+    // a workspace in no group: toggle does nothing, others = every group
+    state.set_snapshot(Box::new(two_group_workspaces("ws_5")));
+    state.collapsed_groups.clear();
+    state.handle_input_bytes(&[0x02]);
+    state.handle_input_bytes(b"u");
+    assert!(state.collapsed_groups.is_empty());
+    assert_eq!(press(&mut state, b"y"), ["repo-a", "repo-b"]);
+    assert!(press(&mut state, b"y").is_empty());
+
+    // navigate mode: the selected workspace's group, and navigate stays open
+    state.set_snapshot(Box::new(two_group_workspaces("ws_3")));
+    state.compose(100, 28).unwrap();
+    enter_navigation(&mut state);
+    preview_key(&mut state, b"u");
+    assert_eq!(state.mode, ClientShellMode::Navigate);
+    assert_eq!(state.collapsed_groups, set(&["repo-b"]));
+    std::fs::remove_file(path).expect("remove client chrome preferences");
+}

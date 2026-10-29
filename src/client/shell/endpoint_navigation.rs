@@ -77,6 +77,125 @@ impl ClientShellState {
         outcome.repaint = true;
     }
 
+    /// The snapshot a fold key acts on: the active endpoint's, or a foreign one in navigate mode.
+    fn endpoint_fold_snapshot(
+        &self,
+        endpoint_id: &ClientEndpointId,
+    ) -> Option<&ClientShellSnapshot> {
+        if *endpoint_id == self.active_endpoint_id {
+            if let Some(snapshot) = self.snapshot.as_deref() {
+                return Some(snapshot);
+            }
+        }
+        self.endpoints
+            .iter()
+            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
+            .and_then(|endpoint| endpoint.snapshot.as_deref())
+    }
+
+    /// Repo keys of the space groups the sidebar can fold: a main checkout with linked worktrees.
+    fn foldable_space_groups(snapshot: &ClientShellSnapshot) -> Vec<String> {
+        let mut keys = Vec::new();
+        for workspace in &snapshot.workspaces {
+            let Some(worktree) = workspace.worktree.as_ref() else {
+                continue;
+            };
+            if worktree.is_linked_worktree || keys.contains(&worktree.key) {
+                continue;
+            }
+            let has_child = snapshot.workspaces.iter().any(|candidate| {
+                candidate.worktree.as_ref().is_some_and(|candidate| {
+                    candidate.key == worktree.key && candidate.is_linked_worktree
+                })
+            });
+            if has_child {
+                keys.push(worktree.key.clone());
+            }
+        }
+        keys
+    }
+
+    /// The fold-key target: the navigate selection, else the active endpoint's focused workspace.
+    fn space_fold_target(&self) -> (ClientEndpointId, Option<String>) {
+        match self.navigate_workspace_id.as_ref() {
+            Some(target) => (
+                target.endpoint_id.clone(),
+                Some(target.workspace_id.clone()),
+            ),
+            None => (
+                self.active_endpoint_id.clone(),
+                self.snapshot
+                    .as_deref()
+                    .and_then(|snapshot| snapshot.focused_workspace_id.clone()),
+            ),
+        }
+    }
+
+    /// Folds or unfolds the space group of the target workspace, the same state as the group
+    /// arrow and `herdr space fold`.
+    pub(super) fn toggle_space_collapse(&mut self, outcome: &mut ClientShellInput) {
+        let (endpoint_id, workspace_id) = self.space_fold_target();
+        let key = self
+            .endpoint_fold_snapshot(&endpoint_id)
+            .and_then(|snapshot| {
+                let worktree = snapshot
+                    .workspaces
+                    .iter()
+                    .find(|workspace| Some(&workspace.workspace_id) == workspace_id.as_ref())?
+                    .worktree
+                    .as_ref()?;
+                Self::foldable_space_groups(snapshot)
+                    .contains(&worktree.key)
+                    .then(|| worktree.key.clone())
+            });
+        let Some(key) = key else {
+            return;
+        };
+        self.toggle_collapsed_group(&endpoint_id, key);
+        self.persist_chrome_preferences(outcome);
+        outcome.repaint = true;
+    }
+
+    /// Folds every other space group of that machine and unfolds the target's own; once every
+    /// other group is folded, unfolds all instead (`herdr space fold-others`).
+    pub(super) fn collapse_other_spaces(&mut self, outcome: &mut ClientShellInput) {
+        let (endpoint_id, workspace_id) = self.space_fold_target();
+        let Some((all, own)) = self.endpoint_fold_snapshot(&endpoint_id).map(|snapshot| {
+            let own = snapshot
+                .workspaces
+                .iter()
+                .find(|workspace| Some(&workspace.workspace_id) == workspace_id.as_ref())
+                .and_then(|workspace| workspace.worktree.as_ref())
+                .map(|worktree| worktree.key.clone());
+            (Self::foldable_space_groups(snapshot), own)
+        }) else {
+            return;
+        };
+        let others = all
+            .into_iter()
+            .filter(|key| Some(key) != own.as_ref())
+            .collect::<HashSet<_>>();
+        if others.is_empty() {
+            return;
+        }
+        let folded = self
+            .collapsed_groups_for_endpoint(&endpoint_id)
+            .cloned()
+            .unwrap_or_default();
+        let next = if others.iter().all(|key| folded.contains(key)) {
+            HashSet::new()
+        } else {
+            others
+        };
+        if endpoint_id.is_local() {
+            self.collapsed_groups = next;
+        } else {
+            self.remote_collapsed_groups.insert(endpoint_id, next);
+        }
+        self.persist_chrome_preferences(outcome);
+        outcome.repaint = true;
+    }
+
     pub(super) fn handle_endpoint_machine_click(
         &mut self,
         point: (u16, u16),

@@ -197,6 +197,14 @@ pub(crate) fn keybind_help_groups(
                     binding_label(&keybinds.collapse_other_machines),
                     "fold others / unfold all",
                 ),
+                entry(
+                    binding_label(&keybinds.toggle_space_collapse),
+                    "fold space group",
+                ),
+                entry(
+                    binding_label(&keybinds.collapse_other_spaces),
+                    "fold other groups / unfold all",
+                ),
                 entry(binding_label(&keybinds.focus_pane_left), "focus pane left"),
                 entry(binding_label(&keybinds.focus_pane_down), "focus pane down"),
                 entry(binding_label(&keybinds.focus_pane_up), "focus pane up"),

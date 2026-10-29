@@ -800,10 +800,22 @@ impl ClientShellState {
         .filter(|action| {
             matches!(
                 action,
-                KeybindAction::ToggleMachineCollapse | KeybindAction::CollapseOtherMachines
+                KeybindAction::ToggleMachineCollapse
+                    | KeybindAction::CollapseOtherMachines
+                    | KeybindAction::ToggleSpaceCollapse
+                    | KeybindAction::CollapseOtherSpaces
             )
         });
         if let Some(action) = fold {
+            // Space-group folds act on the selected workspace's group.
+            if action == KeybindAction::ToggleSpaceCollapse {
+                self.toggle_space_collapse(outcome);
+                return;
+            }
+            if action == KeybindAction::CollapseOtherSpaces {
+                self.collapse_other_spaces(outcome);
+                return;
+            }
             let endpoint_id = self
                 .navigate_workspace_id
                 .as_ref()

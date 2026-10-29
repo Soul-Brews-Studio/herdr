@@ -30,6 +30,16 @@ impl ClientShellState {
                 let active = self.active_endpoint_id.clone();
                 self.collapse_other_machines(&active, outcome);
             }
+            crate::input::KeybindMatch::Action(
+                crate::input::KeybindAction::ToggleSpaceCollapse,
+            ) => {
+                self.toggle_space_collapse(outcome);
+            }
+            crate::input::KeybindMatch::Action(
+                crate::input::KeybindAction::CollapseOtherSpaces,
+            ) => {
+                self.collapse_other_spaces(outcome);
+            }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()
                     && matches!(
