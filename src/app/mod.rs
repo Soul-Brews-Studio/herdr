@@ -3263,6 +3263,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn shutdown_with_no_spaces_left_keeps_the_saved_session() {
+        // white laris-co 2026-10-29: SIGTERM HUP'd every shell (a normal exit, so no pane-exit
+        // checkpoint), the last space went away, and the shutdown save deleted session.json.
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let config_home = unique_temp_path("shutdown-keeps-session");
+        std::env::set_var("XDG_CONFIG_HOME", &config_home);
+        std::env::remove_var(crate::session::SESSION_ENV_VAR);
+
+        let mut app = test_app();
+        app.policy.persist_session = true;
+        app.state.workspaces = vec![Workspace::test_new("kept")];
+        app.state.active = Some(0);
+        app.state.ensure_test_terminals();
+        app.save_session_now();
+
+        app.state.workspaces.clear();
+        app.state.active = None;
+        app.state.session_dirty = true;
+        app.state.should_quit = true;
+        app.save_session_on_shutdown();
+
+        let snapshot = crate::persist::load().expect("shutdown must keep the last session");
+        assert_eq!(snapshot.workspaces.len(), 1);
+
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let _ = std::fs::remove_dir_all(config_home);
+    }
+
+    #[tokio::test]
+    async fn closing_every_space_while_running_still_clears_the_session() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let config_home = unique_temp_path("running-clear-session");
+        std::env::set_var("XDG_CONFIG_HOME", &config_home);
+        std::env::remove_var(crate::session::SESSION_ENV_VAR);
+
+        let mut app = test_app();
+        app.policy.persist_session = true;
+        app.state.workspaces = vec![Workspace::test_new("closed")];
+        app.state.active = Some(0);
+        app.state.ensure_test_terminals();
+        app.save_session_now();
+
+        app.state.workspaces.clear();
+        app.state.active = None;
+        app.save_session_now();
+
+        let data = crate::session::data_dir();
+        assert!(!data.join("session.json").exists());
+        assert!(data.join("session-cleared").exists());
+        assert!(
+            crate::persist::load().is_none(),
+            "a deliberate clear must not come back from a snapshot"
+        );
+
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let _ = std::fs::remove_dir_all(config_home);
+    }
+
+    #[tokio::test]
     async fn pane_exit_checkpoint_survives_automatic_workspace_creation_on_shutdown() {
         let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let config_home = unique_temp_path("signaled-pane-session-checkpoint");

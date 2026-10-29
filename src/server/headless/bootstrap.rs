@@ -24,9 +24,39 @@ pub fn run_server() -> io::Result<()> {
         let token = args
             .get(4)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing handoff token"))?;
+        crate::server::lifetime_lock::acquire_after_handoff(
+            crate::server::lifetime_lock::lock_path(),
+        );
         return run_handoff_import_server(&socket_path, token);
     }
 
+    if crate::server::lifetime_lock::system_is_stopping() {
+        eprintln!("error: the system is shutting down; not starting a herdr server");
+        warn!("system is stopping; refusing to start a server (it would be killed mid-restore)");
+        std::process::exit(1);
+    }
+    // One server per session: wait for a previous one that is still shutting down.
+    let lock_path = crate::server::lifetime_lock::lock_path();
+    let _server_lock = match crate::server::lifetime_lock::acquire(
+        &lock_path,
+        crate::server::lifetime_lock::START_WAIT,
+    ) {
+        Ok(Some(lock)) => lock,
+        Ok(None) => {
+            eprintln!("error: another herdr server for this session is still running or shutting down");
+            eprintln!("lock: {}", lock_path.display());
+            warn!(lock = %lock_path.display(), "another server still holds the session lock; not starting");
+            std::process::exit(1);
+        }
+        Err(err) => {
+            warn!(%err, lock = %lock_path.display(), "could not take the server lock; starting without it");
+            return run_server_unlocked();
+        }
+    };
+    run_server_unlocked()
+}
+
+fn run_server_unlocked() -> io::Result<()> {
     let loaded_config = config::Config::load();
     #[cfg(windows)]
     if loaded_config.config.server.allow_unelevated_clients {

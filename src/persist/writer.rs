@@ -50,6 +50,7 @@ impl SessionWriter {
         }
         // Optional history failure must not reclassify our committed layout as unloaded.
         self.protect_unloaded = false;
+        let _ = super::io::clear_path(&cleared_marker_path(&self.path));
         self.preserve_snapshot_history();
         let history_path = self.path.with_file_name("session-history.json");
         if let Err(err) = super::io::save_history_to_path(&history_path, history) {
@@ -71,8 +72,34 @@ impl SessionWriter {
         if let Err(err) = super::io::clear_path(&history_path) {
             crate::logging::session_clear_failed(&history_path, &err.to_string());
         }
+        // A clear is deliberate (every space closed while the server runs); shutdown never clears.
+        // The marker tells the next start not to fall back to an older snapshot.
+        if let Err(err) = std::fs::write(cleared_marker_path(&self.path), b"cleared\n") {
+            crate::logging::session_clear_failed(
+                &cleared_marker_path(&self.path),
+                &err.to_string(),
+            );
+        }
         crate::logging::session_cleared(&self.path);
     }
+}
+
+/// Written by a deliberate clear, removed by the next save. While it exists, a missing session file
+/// means "nothing to restore", not "lost".
+pub(super) fn cleared_marker_path(session: &Path) -> PathBuf {
+    session.with_file_name("session-cleared")
+}
+
+/// The newest copy in `session-snapshots/` that has at least one space, for a session file that
+/// went missing without a deliberate clear.
+pub(super) fn newest_snapshot_with_spaces(session: &Path) -> Option<(PathBuf, SessionSnapshot)> {
+    let files = recovery_files(&session.with_file_name("session-snapshots")).ok()?;
+    files.into_iter().rev().find_map(|(_, path)| {
+        let snapshot =
+            serde_json::from_slice::<SessionSnapshot>(&std::fs::read(&path).ok()?).ok()?;
+        (snapshot.version <= super::snapshot::SNAPSHOT_VERSION && !snapshot.workspaces.is_empty())
+            .then_some((path, snapshot))
+    })
 }
 
 const SNAPSHOT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
@@ -316,6 +343,33 @@ mod tests {
 
     fn snapshots(writer: &SessionWriter) -> Vec<(u128, PathBuf)> {
         recovery_files(&writer.path.with_file_name("session-snapshots")).unwrap()
+    }
+
+    #[test]
+    fn missing_session_falls_back_to_the_newest_snapshot_with_spaces() {
+        let mut writer = writer(false);
+        writer.save(&snapshot(), None);
+        assert_eq!(snapshots(&writer).len(), 1);
+        std::fs::remove_file(&writer.path).unwrap();
+        assert!(!cleared_marker_path(&writer.path).exists());
+
+        let restored = super::super::io::load_from_path(&writer.path)
+            .expect("a lost session file comes back from session-snapshots");
+        assert_eq!(restored.workspaces.len(), snapshot().workspaces.len());
+    }
+
+    #[test]
+    fn deliberate_clear_writes_a_marker_and_the_next_save_removes_it() {
+        let mut writer = writer(false);
+        writer.save(&snapshot(), None);
+        writer.clear();
+        assert!(cleared_marker_path(&writer.path).exists());
+        assert!(
+            super::super::io::load_from_path(&writer.path).is_none(),
+            "cleared on purpose: nothing to restore"
+        );
+        writer.save(&snapshot(), None);
+        assert!(!cleared_marker_path(&writer.path).exists());
     }
 
     #[test]
