@@ -842,6 +842,18 @@
           "description": "Toggle sidebar collapse."
         },
         {
+          "key": "keys.toggle_machine_collapse",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Fold or unfold a machine in the sidebar: the machine of the selected workspace in navigate mode, otherwise the active machine. Folded machines are remembered across restarts. Unset by default; for example, toggle_machine_collapse = \"prefix+m\"."
+        },
+        {
+          "key": "keys.collapse_other_machines",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Fold every sidebar machine except the one of the selected workspace in navigate mode, otherwise the active machine, and unfold that one. When every other machine is already folded, unfold all machines instead. Unset by default."
+        },
+        {
           "key": "keys.indexed.tabs",
           "type": "string",
           "default": "unset",
@@ -888,6 +900,12 @@
           "type": "boolean",
           "default": "false",
           "description": "Start Herdr with the sidebar collapsed. Changes take effect on the next launch."
+        },
+        {
+          "key": "ui.fold_machines_by_session",
+          "type": "boolean",
+          "default": "false",
+          "description": "When a client attaches, and when saved machines change, unfold saved machines whose session matches the session of this window and fold every other remote machine. Local stays unfolded. Folds changed by hand, by keys, or by `herdr machine` commands last until the next attach. `herdr machine fold-others --same-session` applies the same rule once."
         },
         {
           "key": "ui.sidebar_collapsed_mode",

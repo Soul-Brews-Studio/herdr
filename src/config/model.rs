@@ -455,6 +455,11 @@ pub struct KeysConfig {
     pub resize_pane_right: BindingConfig,
     /// Toggle sidebar collapse. Default: "prefix+b"
     pub toggle_sidebar: BindingConfig,
+    /// Fold or unfold the machine under the navigate cursor, else the active machine. Unset by default.
+    pub toggle_machine_collapse: BindingConfig,
+    /// Fold every machine except the one under the navigate cursor, else the active machine; when the
+    /// others are already folded, unfold all machines. Unset by default.
+    pub collapse_other_machines: BindingConfig,
     /// Optional indexed shortcuts expanded over number keys 1-9.
     pub indexed: IndexedKeysConfig,
     /// Prefix-mode custom command bindings.
@@ -592,6 +597,10 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     toggle_sidebar: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    toggle_machine_collapse: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    collapse_other_machines: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     indexed: Option<IndexedKeysConfig>,
     #[serde(skip_serializing)]
     command: Option<Vec<CommandKeybindConfig>>,
@@ -703,6 +712,8 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(resize_pane_up);
         apply_field!(resize_pane_right);
         apply_field!(toggle_sidebar);
+        apply_field!(toggle_machine_collapse);
+        apply_field!(collapse_other_machines);
         apply_field!(indexed);
         apply_field!(command);
 
@@ -808,6 +819,8 @@ impl KeysConfig {
         copy_effective_action_field!(resize_pane_up, keybinds.resize_pane_up);
         copy_effective_action_field!(resize_pane_right, keybinds.resize_pane_right);
         copy_effective_action_field!(toggle_sidebar, keybinds.toggle_sidebar);
+        copy_effective_action_field!(toggle_machine_collapse, keybinds.toggle_machine_collapse);
+        copy_effective_action_field!(collapse_other_machines, keybinds.collapse_other_machines);
         copy_user_field!(indexed);
 
         profile
@@ -944,6 +957,9 @@ pub struct UiConfig {
     pub sidebar_max_width: u16,
     /// Start with the sidebar collapsed. Default: false.
     pub sidebar_start_collapsed: bool,
+    /// On attach, unfold saved machines whose session matches this window's session and fold
+    /// the other remote machines. Default: false.
+    pub fold_machines_by_session: bool,
     /// Collapsed sidebar presentation. Default: compact.
     pub sidebar_collapsed_mode: SidebarCollapsedModeConfig,
     /// Terminal width at or below which Herdr uses the mobile single-column layout. Default: 64.
@@ -1180,6 +1196,8 @@ impl Default for KeysConfig {
             resize_pane_up: BindingConfig::empty(),
             resize_pane_right: BindingConfig::empty(),
             toggle_sidebar: BindingConfig::one("prefix+b"),
+            toggle_machine_collapse: BindingConfig::empty(),
+            collapse_other_machines: BindingConfig::empty(),
             indexed: IndexedKeysConfig::default(),
             command: Vec::new(),
             user_fields: BTreeSet::new(),
@@ -1202,6 +1220,7 @@ impl Default for UiConfig {
             sidebar_min_width: 18,
             sidebar_max_width: 36,
             sidebar_start_collapsed: false,
+            fold_machines_by_session: false,
             sidebar_collapsed_mode: SidebarCollapsedModeConfig::Compact,
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,
@@ -1704,6 +1723,13 @@ sidebar_start_collapsed = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.ui.sidebar_start_collapsed);
+    }
+
+    #[test]
+    fn fold_machines_by_session_defaults_off_and_parses_on() {
+        assert!(!Config::default().ui.fold_machines_by_session);
+        let config: Config = toml::from_str("[ui]\nfold_machines_by_session = true\n").unwrap();
+        assert!(config.ui.fold_machines_by_session);
     }
 
     #[test]

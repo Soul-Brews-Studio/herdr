@@ -17,6 +17,7 @@ pub(crate) struct ClientShellConfig {
     pub(super) sidebar_min_width: u16,
     pub(super) sidebar_max_width: u16,
     pub(super) sidebar_start_collapsed: bool,
+    pub(super) fold_machines_by_session: bool,
     pub(super) sidebar_collapsed_mode: SidebarCollapsedModeConfig,
     pub(super) mobile_width_threshold: u16,
     pub(super) tab_bar_position: TabBarPositionConfig,
@@ -1028,6 +1029,7 @@ impl ClientShellState {
                 .or_default()
                 .extend(saved.collapsed_groups);
         }
+        let collapsed_endpoints = collapsed_endpoints_from(preferences.collapsed_machines);
         Self {
             machine_diagnostics: Default::default(),
             config,
@@ -1071,7 +1073,7 @@ impl ClientShellState {
             hits: ShellHitMap::default(),
             endpoints: vec![local_endpoint()],
             active_endpoint_id: ClientEndpointId::Local,
-            collapsed_endpoints: HashSet::new(),
+            collapsed_endpoints,
             mode: ClientShellMode::Terminal,
             navigate_workspace_id: None,
             pending_workspace_highlight: None,
@@ -1892,5 +1894,36 @@ impl ClientShellState {
         self.pending_pane_surface = None;
         self.hits = ShellHitMap::default();
         self.host_mouse_pixels = None;
+    }
+}
+
+fn collapsed_endpoints_from(saved: Vec<String>) -> HashSet<ClientEndpointId> {
+    saved
+        .into_iter()
+        .filter_map(|saved| {
+            if saved == preferences::LOCAL_MACHINE_KEY {
+                return Some(ClientEndpointId::Local);
+            }
+            crate::client::endpoint::ProfileId::parse(saved)
+                .ok()
+                .map(ClientEndpointId::Ssh)
+        })
+        .collect()
+}
+
+impl ClientShellState {
+    pub(crate) fn preferences_path(&self) -> Option<&std::path::Path> {
+        self.config.preferences_path.as_deref()
+    }
+
+    /// Adopts folds another process wrote to this client's preferences file, such as
+    /// `herdr machine fold`. Returns whether the sidebar changed.
+    pub(crate) fn apply_saved_machine_folds(&mut self, saved: Vec<String>) -> bool {
+        let next = collapsed_endpoints_from(saved);
+        if next == self.collapsed_endpoints {
+            return false;
+        }
+        self.collapsed_endpoints = next;
+        true
     }
 }

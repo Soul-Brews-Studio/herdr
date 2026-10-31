@@ -61,6 +61,8 @@ pub(crate) enum KeybindAction {
     ResizePaneUp,
     ResizePaneRight,
     ToggleSidebar,
+    ToggleMachineCollapse,
+    CollapseOtherMachines,
     CyclePaneNext,
     CyclePanePrevious,
     LastPane,
@@ -147,6 +149,14 @@ pub(crate) fn resolve_non_indexed_action(
         (&keybinds.resize_pane_up, KeybindAction::ResizePaneUp),
         (&keybinds.resize_pane_right, KeybindAction::ResizePaneRight),
         (&keybinds.toggle_sidebar, KeybindAction::ToggleSidebar),
+        (
+            &keybinds.toggle_machine_collapse,
+            KeybindAction::ToggleMachineCollapse,
+        ),
+        (
+            &keybinds.collapse_other_machines,
+            KeybindAction::CollapseOtherMachines,
+        ),
         (&keybinds.reload_config, KeybindAction::ReloadConfig),
         (
             &keybinds.open_notification_target,
@@ -291,6 +301,33 @@ mod tests {
                 &TerminalKey::new(KeyCode::Char('k'), KeyModifiers::SHIFT)
             ),
             Some(KeybindMatch::Action(KeybindAction::SwapPaneUp))
+        ));
+    }
+
+    #[test]
+    fn machine_fold_actions_are_unbound_by_default_and_configurable() {
+        let keybinds = crate::config::Config::default().keybinds();
+        assert!(keybinds.toggle_machine_collapse.bindings.is_empty());
+        assert!(keybinds.collapse_other_machines.bindings.is_empty());
+        let config: crate::config::Config = toml::from_str(
+            "[keys]\ntoggle_machine_collapse = \"prefix+m\"\ncollapse_other_machines = \"prefix+shift+m\"",
+        )
+        .unwrap();
+        assert!(config.collect_diagnostics().is_empty());
+        let keybinds = config.keybinds();
+        assert!(matches!(
+            resolve_prefix_binding(
+                &keybinds,
+                &TerminalKey::new(KeyCode::Char('m'), KeyModifiers::empty())
+            ),
+            Some(KeybindMatch::Action(KeybindAction::ToggleMachineCollapse))
+        ));
+        assert!(matches!(
+            resolve_prefix_binding(
+                &keybinds,
+                &TerminalKey::new(KeyCode::Char('m'), KeyModifiers::SHIFT)
+            ),
+            Some(KeybindMatch::Action(KeybindAction::CollapseOtherMachines))
         ));
     }
 

@@ -44,7 +44,8 @@ pub(crate) enum ClientEndpointFocusTarget {
 }
 
 impl ClientShellState {
-    pub(crate) fn set_endpoint_catalog(&mut self, profiles: &[SavedSshEndpoint]) {
+    /// Returns whether a folded machine was dropped because its profile no longer exists.
+    pub(crate) fn set_endpoint_catalog(&mut self, profiles: &[SavedSshEndpoint]) -> bool {
         let mut next = Vec::with_capacity(profiles.len().saturating_add(1));
         let local = self
             .endpoints
@@ -97,11 +98,31 @@ impl ClientShellState {
         {
             self.select_unavailable_local();
         }
+        let folded = self.collapsed_endpoints.len();
         self.collapsed_endpoints.retain(|endpoint_id| {
             next.iter()
                 .any(|endpoint| &endpoint.endpoint_id == endpoint_id)
         });
         self.endpoints = next;
+        self.collapsed_endpoints.len() != folded
+    }
+
+    /// With `ui.fold_machines_by_session`, opens Local and the saved machines of `session` and
+    /// folds every other machine, then saves the result.
+    pub(crate) fn apply_session_folds(&mut self, session: &str, profiles: &[SavedSshEndpoint]) {
+        if !self.config.fold_machines_by_session {
+            return;
+        }
+        self.collapsed_endpoints =
+            crate::client::endpoint::machines_outside_session(profiles, session)
+                .map(|id| ClientEndpointId::Ssh(id.clone()))
+                .collect();
+        self.persist_chrome_preferences(&mut ClientShellInput::default());
+    }
+
+    /// Saves folded machines after a live catalog change removed some of them.
+    pub(crate) fn persist_removed_machine_folds(&mut self) {
+        self.persist_chrome_preferences(&mut ClientShellInput::default());
     }
 
     pub(crate) fn select_unavailable_local(&mut self) {

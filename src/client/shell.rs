@@ -27,7 +27,7 @@ mod mouse;
 mod notification_policy;
 mod notifications;
 mod overlay_input;
-mod preferences;
+pub(crate) mod preferences;
 mod render;
 mod scroll;
 mod settings;

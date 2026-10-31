@@ -453,7 +453,9 @@ fn foreign_preview_survives_local_updates_and_rejects_stale_enter() {
                 profile.enabled = false;
                 state.set_endpoint_catalog(&[profile]);
             }
-            "removed" => state.set_endpoint_catalog(&[]),
+            "removed" => {
+                state.set_endpoint_catalog(&[]);
+            }
             "deleted" => {
                 remote.revision += 1;
                 remote.workspaces.pop();
@@ -1025,4 +1027,92 @@ fn kitty_ctrl_bracket_cancels_a_blocked_foreign_preview() {
 
     assert_ne!(state.mode, ClientShellMode::Navigate);
     assert!(state.navigate_workspace_id.is_none());
+}
+
+#[test]
+fn machine_fold_keys_target_the_active_or_selected_machine() {
+    let (mut state, remote_id) = state_with_remote();
+    state.compose(100, 28).unwrap();
+    state.handle_input_bytes(&[0x02]);
+    state.handle_input_bytes(b"m");
+    assert!(state.collapsed_endpoints.is_empty(), "unbound by default");
+
+    let mut config = Config::default();
+    config.keys.toggle_machine_collapse = crate::config::BindingConfig::one("prefix+m");
+    config.keys.collapse_other_machines = crate::config::BindingConfig::one("prefix+y");
+    state.config.keybinds = ClientShellConfig::from_config(&config).keybinds;
+    for folded in [true, false] {
+        state.handle_input_bytes(&[0x02]);
+        let outcome = state.handle_input_bytes(b"m");
+        assert!(outcome.repaint);
+        assert_eq!(
+            state.collapsed_endpoints.contains(&ClientEndpointId::Local),
+            folded
+        );
+        assert!(!state.collapsed_endpoints.contains(&remote_id));
+    }
+
+    state.compose(100, 28).unwrap();
+    enter_navigation(&mut state);
+    for _ in 0..20 {
+        if state
+            .navigate_workspace_id
+            .as_ref()
+            .is_some_and(|target| target.endpoint_id == remote_id)
+        {
+            break;
+        }
+        preview_key(&mut state, b"\x1b[B");
+    }
+    preview_key(&mut state, b"m");
+    assert_eq!(state.mode, ClientShellMode::Navigate);
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([remote_id.clone()])
+    );
+    assert_eq!(state.active_endpoint_id, ClientEndpointId::Local);
+
+    preview_key(&mut state, b"y");
+    assert_eq!(state.mode, ClientShellMode::Navigate);
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([ClientEndpointId::Local])
+    );
+
+    preview_key(&mut state, b"y");
+    assert!(state.collapsed_endpoints.is_empty());
+}
+
+#[test]
+fn collapse_other_machines_toggles_and_is_saved() {
+    let path = std::env::temp_dir().join(format!(
+        "herdr-client-shell-fold-others-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let (mut state, remote_id) = state_with_remote();
+    state.config.preferences_path = Some(path.clone());
+    let mut config = Config::default();
+    config.keys.collapse_other_machines = crate::config::BindingConfig::one("prefix+y");
+    state.config.keybinds = ClientShellConfig::from_config(&config).keybinds;
+    let press = |state: &mut ClientShellState| {
+        state.handle_input_bytes(&[0x02]);
+        assert!(state.handle_input_bytes(b"y").repaint);
+        preferences::load(&path)
+            .expect("saved machine folds")
+            .collapsed_machines
+    };
+
+    assert_eq!(press(&mut state), [remote_profile().id.to_string()]);
+    assert_eq!(
+        state.collapsed_endpoints,
+        HashSet::from([remote_id.clone()])
+    );
+    assert!(press(&mut state).is_empty());
+    assert!(state.collapsed_endpoints.is_empty());
+
+    state.collapsed_endpoints.insert(remote_id.clone());
+    assert!(press(&mut state).is_empty());
+    assert!(state.collapsed_endpoints.is_empty());
+    std::fs::remove_file(path).expect("remove client chrome preferences");
 }

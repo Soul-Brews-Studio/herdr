@@ -23,6 +23,32 @@ pub(super) fn watch_profiles(
     });
 }
 
+/// Picks up folds written by `herdr machine fold` and friends. The client's own writes come
+/// back here too and are ignored because they match its state.
+pub(super) fn watch_machine_folds(
+    path: std::path::PathBuf,
+    event_tx: tokio::sync::mpsc::Sender<ClientLoopEvent>,
+    should_quit: Arc<AtomicBool>,
+) {
+    std::thread::spawn(move || {
+        let mut previous = None;
+        while !should_quit.load(Ordering::Acquire) {
+            if let Ok(current) = shell::preferences::load_collapsed_machines(&path) {
+                if previous.as_ref() != Some(&current) {
+                    previous = Some(current.clone());
+                    if event_tx
+                        .blocking_send(ClientLoopEvent::MachineFolds(current))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    });
+}
+
 // Only called between surface handoffs: removing a source must not invalidate an in-flight
 // rollback. Connection attempts are independent and fenced by supervisor generations.
 pub(super) fn apply_profiles(
@@ -72,7 +98,14 @@ pub(super) fn apply_profiles(
         catalog.select_local();
     }
     if let Some(shell) = state.shell.as_mut() {
-        shell.set_endpoint_catalog(&catalog.ssh);
+        // Only a live catalog reload saves pruned folds; a failed startup load must not erase them.
+        if shell.set_endpoint_catalog(&catalog.ssh) {
+            shell.persist_removed_machine_folds();
+        }
+        shell.apply_session_folds(
+            &crate::session::name_for_client_socket(&client_socket_path()),
+            &catalog.ssh,
+        );
         if endpoints.active_surface_available()
             && previous_size
                 != Some(shell.surface_size(state.reported_size.0, state.reported_size.1))

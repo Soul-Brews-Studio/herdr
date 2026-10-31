@@ -42,6 +42,41 @@ impl ClientShellState {
         );
     }
 
+    pub(super) fn toggle_machine_collapse(
+        &mut self,
+        endpoint_id: ClientEndpointId,
+        outcome: &mut ClientShellInput,
+    ) {
+        if !self.collapsed_endpoints.remove(&endpoint_id) {
+            self.collapsed_endpoints.insert(endpoint_id);
+        }
+        self.persist_chrome_preferences(outcome);
+        outcome.repaint = true;
+    }
+
+    pub(super) fn collapse_other_machines(
+        &mut self,
+        endpoint_id: &ClientEndpointId,
+        outcome: &mut ClientShellInput,
+    ) {
+        let others = self
+            .endpoints
+            .iter()
+            .map(|endpoint| &endpoint.endpoint_id)
+            .filter(|other| *other != endpoint_id);
+        // Once every other machine is folded, the same key unfolds all of them.
+        self.collapsed_endpoints = if others
+            .clone()
+            .all(|other| self.collapsed_endpoints.contains(other))
+        {
+            HashSet::new()
+        } else {
+            others.cloned().collect()
+        };
+        self.persist_chrome_preferences(outcome);
+        outcome.repaint = true;
+    }
+
     pub(super) fn handle_endpoint_machine_click(
         &mut self,
         point: (u16, u16),
@@ -58,10 +93,7 @@ impl ClientShellState {
         let endpoint_id = hit.endpoint_id.clone();
         let collapse_toggle = super::contains(hit.collapse_toggle, point);
         if collapse_toggle || endpoint_id == self.active_endpoint_id {
-            if !self.collapsed_endpoints.remove(&endpoint_id) {
-                self.collapsed_endpoints.insert(endpoint_id.clone());
-            }
-            outcome.repaint = true;
+            self.toggle_machine_collapse(endpoint_id.clone(), outcome);
             if !collapse_toggle && endpoint_id.is_local() {
                 self.activate_endpoint(endpoint_id, outcome);
             }

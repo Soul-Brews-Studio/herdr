@@ -261,27 +261,37 @@ pub(super) fn resolve_machine<'a>(
     profiles: &'a [SavedSshEndpoint],
     selector: &str,
 ) -> Result<&'a SavedSshEndpoint, String> {
-    let profile = if let Some(profile) = profiles
-        .iter()
-        .find(|profile| profile.id.as_str() == selector)
-    {
-        profile
-    } else {
-        let mut matches = profiles.iter().filter(|profile| profile.label == selector);
-        let profile = matches
-            .next()
-            .ok_or_else(|| format!("unknown machine '{selector}'; use `herdr machine list`"))?;
-        if matches.next().is_some() {
-            return Err(format!(
-                "machine label '{selector}' is ambiguous; use its profile ID"
-            ));
-        }
-        profile
-    };
+    let profile = find_machine(profiles, selector)?;
     if !profile.enabled {
         return Err(format!("machine '{selector}' is disabled"));
     }
     Ok(profile)
+}
+
+/// Finds a saved machine by profile ID or unique label, including disabled machines.
+pub(super) fn find_machine<'a>(
+    profiles: &'a [SavedSshEndpoint],
+    selector: &str,
+) -> Result<&'a SavedSshEndpoint, String> {
+    Ok(
+        if let Some(profile) = profiles
+            .iter()
+            .find(|profile| profile.id.as_str() == selector)
+        {
+            profile
+        } else {
+            let mut matches = profiles.iter().filter(|profile| profile.label == selector);
+            let profile = matches
+                .next()
+                .ok_or_else(|| format!("unknown machine '{selector}'; use `herdr machine list`"))?;
+            if matches.next().is_some() {
+                return Err(format!(
+                    "machine label '{selector}' is ambiguous; use its profile ID"
+                ));
+            }
+            profile
+        },
+    )
 }
 
 fn validate_machine_command(args: &[String]) -> Result<(), String> {

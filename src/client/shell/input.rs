@@ -762,7 +762,7 @@ impl ClientShellState {
             .workspace_up
             .matches_direct_key(key)
         {
-            self.move_navigate_workspace(-1);
+            self.move_navigate_workspace(-1, outcome);
             outcome.repaint = true;
             return;
         }
@@ -774,7 +774,7 @@ impl ClientShellState {
             .workspace_down
             .matches_direct_key(key)
         {
-            self.move_navigate_workspace(1);
+            self.move_navigate_workspace(1, outcome);
             outcome.repaint = true;
             return;
         }
@@ -782,6 +782,31 @@ impl ClientShellState {
         let (code, modifiers) = crate::config::normalize_key_combo((key.code, key.modifiers));
         if code == KeyCode::Enter && modifiers.is_empty() {
             self.accept_navigate_workspace(outcome);
+            return;
+        }
+        // Machine folds act on the selected row's machine, including a foreign preview.
+        let fold = crate::input::resolve_non_indexed_action(
+            &self.config.keybinds.keybinds,
+            key,
+            KeybindDispatch::Prefix,
+        )
+        .filter(|action| {
+            matches!(
+                action,
+                KeybindAction::ToggleMachineCollapse | KeybindAction::CollapseOtherMachines
+            )
+        });
+        if let Some(action) = fold {
+            let endpoint_id = self
+                .navigate_workspace_id
+                .as_ref()
+                .map(|target| target.endpoint_id.clone())
+                .unwrap_or_else(|| self.active_endpoint_id.clone());
+            if action == KeybindAction::ToggleMachineCollapse {
+                self.toggle_machine_collapse(endpoint_id, outcome);
+            } else {
+                self.collapse_other_machines(&endpoint_id, outcome);
+            }
             return;
         }
         if self.workspace_preview_action_blocked() {

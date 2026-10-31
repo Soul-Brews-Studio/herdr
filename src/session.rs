@@ -182,6 +182,22 @@ pub fn active_api_socket_path() -> PathBuf {
     api_socket_path_for(active_name().as_deref())
 }
 
+/// Session that owns a client socket: `default` for the config directory, `<name>` for
+/// `sessions/<name>/`. Other override paths fall back to the active session.
+pub fn name_for_client_socket(path: &Path) -> String {
+    let config_dir = crate::config::config_dir();
+    let parent = path.parent();
+    if parent == Some(config_dir.as_path()) {
+        return DEFAULT_SESSION_NAME.to_owned();
+    }
+    if let Some(dir) = parent.filter(|dir| dir.parent() == Some(&config_dir.join("sessions"))) {
+        if let Some(name) = dir.file_name().and_then(|name| name.to_str()) {
+            return name.to_owned();
+        }
+    }
+    active_name().unwrap_or_else(|| DEFAULT_SESSION_NAME.to_owned())
+}
+
 pub fn client_socket_path_for(name: Option<&str>) -> PathBuf {
     data_dir_for(name).join("herdr-client.sock")
 }
@@ -503,6 +519,23 @@ fn normalize_name(name: &str) -> Result<Option<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn client_socket_session_names() {
+        let config_dir = crate::config::config_dir();
+        assert_eq!(
+            name_for_client_socket(&config_dir.join("herdr-client.sock")),
+            DEFAULT_SESSION_NAME
+        );
+        assert_eq!(
+            name_for_client_socket(&client_socket_path_for(Some("nsm"))),
+            "nsm"
+        );
+        assert_eq!(
+            name_for_client_socket(&client_socket_path_for(None)),
+            DEFAULT_SESSION_NAME
+        );
+    }
     #[cfg(unix)]
     use interprocess::local_socket::traits::Listener as _;
     use std::sync::Mutex;

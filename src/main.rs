@@ -192,6 +192,8 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # resize_pane_up = ""     # optional, e.g. "ctrl+shift+alt+up"
 # resize_pane_right = ""  # optional, e.g. "ctrl+shift+alt+right"
 # toggle_sidebar = "prefix+b"
+# toggle_machine_collapse = ""  # optional, e.g. "prefix+m" folds the active machine (navigate: the selected one)
+# collapse_other_machines = ""  # optional, e.g. "prefix+shift+m" folds every other machine, again unfolds all
 
 # Navigate-mode movement. These local shortcuts win while navigate mode is open.
 # They are independent from focus_pane_*. Do not include prefix+, esc, enter, tab, or 1..9 here.
@@ -246,6 +248,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 
 # Start with the sidebar collapsed. Changes take effect on the next launch.
 # sidebar_start_collapsed = false
+
+# On attach, open saved machines whose session matches this window's session and fold the
+# other remote machines. Local stays open. Manual folds last until the next attach.
+# fold_machines_by_session = false
 
 # Collapsed sidebar presentation: "compact" keeps the narrow status rail, "hidden" uses zero width.
 # sidebar_collapsed_mode = "compact"
